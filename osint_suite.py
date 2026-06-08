@@ -316,6 +316,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
 # ========== TAB 1: Reverse Image ==========
 with tab1:
     st.markdown("### 🔍 Reverse Image Search")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Upload an image — we host it and open every major reverse-search engine pre-loaded.</p>", unsafe_allow_html=True)
     img_file = st.file_uploader("Upload photo", type=["jpg","png","jpeg","webp"], key="rev")
     if img_file:
         img_bytes = img_file.getvalue()
@@ -347,10 +348,10 @@ with tab1:
             except Exception as e:
                 st.error(f"Error: {e}")
 
-# ========== TAB 2: Username Hunt (TikTok fixed) ==========
+# ========== TAB 2: Username Hunt ==========
 with tab2:
     st.markdown("### 👤 Username Hunt")
-    st.markdown("Enter a **username** or **real name** – we'll find social profiles (including TikTok).")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Search a username or real name across 12 platforms simultaneously.</p>", unsafe_allow_html=True)
     query = st.text_input("Name or username", placeholder="username or John Doe", key="username_input")
     mode = st.radio("Mode", ["Username → Socials", "Name → Socials"], horizontal=True)
     if st.button("🔍 Hunt", use_container_width=True) and query:
@@ -433,84 +434,101 @@ with tab2:
 
 # ========== TAB 3: Email OSINT ==========
 with tab3:
-    st.markdown("### 📧 Email OSINT (Real Data)")
+    st.markdown("### 📧 Email OSINT")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Gravatar lookup, breach check (HIBP), and email reputation — live data.</p>", unsafe_allow_html=True)
     email = st.text_input("Email address", placeholder="target@example.com")
     if st.button("Analyze", use_container_width=True) and email:
         if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-            st.error("Invalid email")
+            st.error("Invalid email format")
         else:
             local, domain = email.split("@")
-            md5 = hashlib.md5(email.encode()).hexdigest()
+            md5 = hashlib.md5(email.strip().lower().encode()).hexdigest()
             st.markdown(f"""
             <div class='glass-card'>
                 <b>📧 Email:</b> {email}<br>
-                <b>👤 Local:</b> {local}<br>
-                <b>🌐 Domain:</b> {domain}<br>
+                <b>👤 Local part:</b> {local} &nbsp;·&nbsp; <b>🌐 Domain:</b> {domain}<br>
                 <b>🔐 MD5:</b> <code>{md5}</code>
             </div>
             """, unsafe_allow_html=True)
-            
+
             # Gravatar
             grav_url = f"https://www.gravatar.com/avatar/{md5}?d=404"
             try:
                 g = requests.get(grav_url, timeout=5)
                 if g.status_code == 200:
-                    st.success("✅ Gravatar profile exists")
-                    st.image(f"https://www.gravatar.com/avatar/{md5}?s=100", width=100)
+                    gc1, gc2 = st.columns([1, 4])
+                    gc1.image(f"https://www.gravatar.com/avatar/{md5}?s=80", width=80)
+                    gc2.markdown("<div class='result-card'>✅ <b>Gravatar profile found</b><br><span style='color:rgba(160,200,240,0.6);font-size:0.8rem;'>This email has a Gravatar-linked account.</span></div>", unsafe_allow_html=True)
                 else:
-                    st.info("No Gravatar")
+                    st.markdown("<div class='result-card'>— No Gravatar profile</div>", unsafe_allow_html=True)
             except:
                 pass
-            
+
             # HIBP
-            st.markdown("#### 🔓 Breach Check (HIBP)")
-            with st.spinner("Querying HaveIBeenPwned..."):
+            st.markdown("#### 🔓 Data Breach Check")
+            with st.spinner("Checking HaveIBeenPwned..."):
                 try:
                     hibp_url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{urllib.parse.quote(email)}"
                     r = requests.get(hibp_url, headers={"hibp-api-key": ""}, timeout=10)
                     if r.status_code == 200:
                         breaches = r.json()
-                        st.error(f"⚠️ Found in {len(breaches)} breaches")
-                        for b in breaches[:5]:
-                            st.write(f"- **{b['Name']}** ({b.get('BreachDate','?')})")
+                        st.error(f"⚠️ Found in {len(breaches)} breach{'es' if len(breaches)>1 else ''}")
+                        for b in breaches[:8]:
+                            st.markdown(f"<div class='result-card'><b>{b['Name']}</b> <span style='color:rgba(160,200,240,0.5);font-size:0.8rem;'>{b.get('BreachDate','unknown date')}</span><br><span style='color:rgba(160,200,240,0.6);font-size:0.78rem;'>{', '.join(b.get('DataClasses',[])[:4])}</span></div>", unsafe_allow_html=True)
                     elif r.status_code == 404:
-                        st.success("✅ No breaches found")
+                        st.success("✅ No breaches found in HIBP database")
                     else:
-                        st.link_button("Check manually", f"https://haveibeenpwned.com/account/{urllib.parse.quote(email)}")
+                        st.link_button("Check on HIBP →", f"https://haveibeenpwned.com/account/{urllib.parse.quote(email)}")
                 except:
-                    st.link_button("Manual check", f"https://haveibeenpwned.com/account/{urllib.parse.quote(email)}")
-            
+                    st.link_button("Check on HaveIBeenPwned →", f"https://haveibeenpwned.com/account/{urllib.parse.quote(email)}")
+
             # EmailRep
-            st.markdown("#### 📊 Email Reputation (EmailRep)")
+            st.markdown("#### 📊 Email Reputation")
             try:
                 erep = requests.get(f"https://emailrep.io/{urllib.parse.quote(email)}", timeout=8)
                 if erep.status_code == 200:
                     data = erep.json()
-                    st.write(f"**Reputation:** {data.get('reputation', 'unknown')}")
-                    st.write(f"**Suspicious:** {data.get('suspicious', False)}")
-                    st.write(f"**Domain age:** {data.get('details',{}).get('domain_created', '?')}")
+                    rep = data.get('reputation', 'unknown')
+                    susp = data.get('suspicious', False)
+                    rep_color = "#ff3b30" if susp else "#34c759" if rep == "high" else "#ffcc00"
+                    st.markdown(f"""<div class='glass-card'>
+                        <b>Reputation:</b> <span style='color:{rep_color};font-weight:700;'>{rep.upper()}</span>
+                        &nbsp;·&nbsp; <b>Suspicious:</b> {"⚠️ Yes" if susp else "✅ No"}<br>
+                        <b>Domain created:</b> {data.get('details',{}).get('domain_created','?')}
+                        &nbsp;·&nbsp; <b>Profiles:</b> {', '.join(data.get('details',{}).get('profiles',[]) or ['none found'])}
+                    </div>""", unsafe_allow_html=True)
                 else:
-                    st.info("EmailRep rate limited")
+                    st.markdown("<div class='result-card'>EmailRep rate limited — try again shortly.</div>", unsafe_allow_html=True)
             except:
                 pass
 
-# ========== TAB 4: Metadata (fixed PIL error) ==========
+# ========== TAB 4: Metadata & EXIF ==========
 with tab4:
     st.markdown("### 📁 Metadata & EXIF")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Extract EXIF data, GPS coordinates, and camera info from any image.</p>", unsafe_allow_html=True)
     meta_file = st.file_uploader("Upload image", type=["jpg","jpeg","png","tiff"], key="meta")
     if meta_file:
         try:
             img = Image.open(io.BytesIO(meta_file.getvalue()))
-            st.image(img, width=250)
-            st.markdown(f"**Format:** {img.format}  \n**Size:** {img.size[0]}x{img.size[1]}")
+            mc1, mc2 = st.columns([1, 2])
+            with mc1:
+                st.image(img, width=220)
+            with mc2:
+                st.markdown(f"""<div class='glass-card'>
+                    <b>📄 File:</b> {meta_file.name}<br>
+                    <b>🖼️ Format:</b> {img.format or 'unknown'} &nbsp;·&nbsp; <b>Mode:</b> {img.mode}<br>
+                    <b>📐 Dimensions:</b> {img.size[0]} × {img.size[1]} px<br>
+                    <b>📦 Size:</b> {len(meta_file.getvalue())//1024} KB
+                </div>""", unsafe_allow_html=True)
             exif = img._getexif()
             if exif:
-                gps = any("GPS" in ExifTags.TAGS.get(k,'') for k in exif)
-                if gps:
-                    st.warning("⚠️ GPS coordinates present")
-                st.json({ExifTags.TAGS.get(k,k): str(v)[:200] for k,v in exif.items()})
+                gps_tags = {ExifTags.TAGS.get(k,k): v for k,v in exif.items() if "GPS" in ExifTags.TAGS.get(k,'')}
+                if gps_tags:
+                    st.warning("⚠️ GPS coordinates present — location data embedded in this image.")
+                with st.expander("📋 Full EXIF data", expanded=True):
+                    st.json({ExifTags.TAGS.get(k, str(k)): str(v)[:200] for k, v in exif.items()})
             else:
-                st.info("No EXIF data")
+                st.markdown("<div class='result-card'>— No EXIF metadata found in this image.</div>", unsafe_allow_html=True)
         except Exception as e:
             st.error(f"Could not read image: {e}")
 
@@ -903,10 +921,10 @@ with tab5:
         rc2.link_button("pwntools docs", "https://docs.pwntools.com", use_container_width=True)
         rc3.link_button("CTF101 guide", "https://ctf101.org", use_container_width=True)
 
-# ========== TAB 6: Deep File Scan (enhanced) ==========
+# ========== TAB 6: Deep File Scan ==========
 with tab6:
-    st.markdown("### 🔬 Deep File Scan – Aperisolve level")
-    st.markdown("Upload any file to extract strings, entropy heatmap, embedded signatures, and flag patterns.")
+    st.markdown("### 🔬 Deep File Scan")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Extract strings, entropy heatmap, embedded file signatures, and flag patterns from any file.</p>", unsafe_allow_html=True)
     deep_file = st.file_uploader("Choose a file", type=["jpg","png","gif","bmp","pdf","zip","tar","bin","elf","exe","docx"], key="deep")
     if deep_file:
         file_bytes = deep_file.getvalue()
@@ -1013,6 +1031,7 @@ strings {fname} | grep -iE 'flag|secret'
 # ========== TAB 7: Network Recon ==========
 with tab7:
     st.markdown("### 🌐 Network Reconnaissance")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>DNS records, IP geolocation, port scan, and threat intelligence — all from one query.</p>", unsafe_allow_html=True)
     target = st.text_input("Target (IP or domain)", placeholder="8.8.8.8 or example.com", key="recon_target")
     col_a, col_b = st.columns(2)
     check_ports = col_a.checkbox("Port scan (top 20)", value=False)
@@ -1129,7 +1148,7 @@ dnsx -l subs.txt -resp -a -aaaa -mx -ns
 # ========== TAB 8: Password Intel ==========
 with tab8:
     st.markdown("### 🔑 Password Intelligence")
-    st.markdown("Analyze password strength, generate wordlists, and check hash formats — all offline.")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Analyze strength, generate hashes, and build targeted wordlists — fully offline.</p>", unsafe_allow_html=True)
 
     pw_mode = st.radio("Mode", ["Strength Analyzer", "Hash Generator", "Wordlist Builder"], horizontal=True)
 
