@@ -375,21 +375,83 @@ with tab2:
                     candidates.add(f"{first[0]}{last}")
                     candidates.add(f"{last}{first}")
                     candidates.add(f"{first}{last}1")
-        candidates = list(candidates)[:15]
+        candidates = list(candidates)[:20]
         
         platforms = {
-            "📸 Instagram": "https://instagram.com/{}",
-            "🎵 TikTok": "https://tiktok.com/@{}",
-            "🐦 Twitter": "https://twitter.com/{}",
-            "📘 Facebook": "https://facebook.com/{}",
-            "💻 GitHub": "https://github.com/{}",
-            "🤖 Reddit": "https://reddit.com/user/{}",
-            "🎬 YouTube": "https://youtube.com/@{}",
-            "📺 Twitch": "https://twitch.tv/{}",
-            "👻 Snapchat": "https://snapchat.com/add/{}",
-            "📱 Telegram": "https://t.me/{}",
-            "📌 Pinterest": "https://pinterest.com/{}",
-            "💼 LinkedIn": "https://linkedin.com/in/{}"
+            # Video / streaming
+            "🎵 TikTok":          "https://tiktok.com/@{}",
+            "🎬 YouTube":         "https://youtube.com/@{}",
+            "📺 Twitch":          "https://twitch.tv/{}",
+            "🎥 Dailymotion":     "https://dailymotion.com/{}",
+            "🎞️ Vimeo":           "https://vimeo.com/{}",
+            "▶️ Rumble":          "https://rumble.com/user/{}",
+            "🎮 Kick":            "https://kick.com/{}",
+            "🌊 Triller":         "https://triller.co/@{}",
+            # Photo / visual
+            "📸 Instagram":       "https://instagram.com/{}",
+            "📌 Pinterest":       "https://pinterest.com/{}",
+            "📷 Flickr":          "https://flickr.com/people/{}",
+            "🖼️ DeviantArt":      "https://deviantart.com/{}",
+            "🎨 Behance":         "https://behance.net/{}",
+            "🖌️ ArtStation":      "https://artstation.com/{}",
+            "📐 Dribbble":        "https://dribbble.com/{}",
+            "👁️ 500px":           "https://500px.com/p/{}",
+            "🌅 VSCO":            "https://vsco.co/{}",
+            # Social / micro-blogging
+            "🐦 Twitter/X":       "https://twitter.com/{}",
+            "📘 Facebook":        "https://facebook.com/{}",
+            "💼 LinkedIn":        "https://linkedin.com/in/{}",
+            "🔵 Bluesky":         "https://bsky.app/profile/{}",
+            "🐘 Mastodon":        "https://mastodon.social/@{}",
+            "🟠 Threads":         "https://threads.net/@{}",
+            "📣 Truth Social":    "https://truthsocial.com/@{}",
+            "📝 Tumblr":          "https://tumblr.com/{}",
+            "🔗 Medium":          "https://medium.com/@{}",
+            "📰 Substack":        "https://substack.com/@{}",
+            "🌐 Blogger":         "https://{}.blogspot.com",
+            "🪐 Pillowfort":      "https://pillowfort.social/{}",
+            # Dev / tech
+            "💻 GitHub":          "https://github.com/{}",
+            "🦊 GitLab":          "https://gitlab.com/{}",
+            "🪣 Bitbucket":       "https://bitbucket.org/{}",
+            "🖥️ HackerNews":      "https://news.ycombinator.com/user?id={}",
+            "📦 npm":             "https://www.npmjs.com/~{}",
+            "🐍 PyPI":            "https://pypi.org/user/{}",
+            "🔶 Stack Overflow":  "https://stackoverflow.com/users/{}",
+            "💬 Dev.to":          "https://dev.to/{}",
+            "🦀 Codeforces":      "https://codeforces.com/profile/{}",
+            "⚔️ HackTheBox":      "https://app.hackthebox.com/users/{}",
+            "🚩 TryHackMe":       "https://tryhackme.com/p/{}",
+            # Community / forums
+            "🤖 Reddit":          "https://reddit.com/user/{}",
+            "💬 Discord":         "https://discord.com/users/{}",
+            "📱 Telegram":        "https://t.me/{}",
+            "🗣️ Quora":           "https://quora.com/profile/{}",
+            "🏆 Kahoot":          "https://create.kahoot.it/profiles/{}",
+            "🎮 Steam":           "https://steamcommunity.com/id/{}",
+            "🎮 Xbox":            "https://xboxgamertag.com/search/{}",
+            "🎮 PlayStation":     "https://psnprofiles.com/{}",
+            "🎮 Roblox":          "https://roblox.com/user.aspx?username={}",
+            # Music
+            "🎵 SoundCloud":      "https://soundcloud.com/{}",
+            "🎶 Spotify":         "https://open.spotify.com/user/{}",
+            "🎤 Last.fm":         "https://last.fm/user/{}",
+            "🎵 Bandcamp":        "https://bandcamp.com/{}",
+            "🎹 ReverbNation":    "https://reverbnation.com/{}",
+            # Professional / niche
+            "🐈 Product Hunt":    "https://producthunt.com/@{}",
+            "🌍 About.me":        "https://about.me/{}",
+            "🔑 Keybase":         "https://keybase.io/{}",
+            "📊 Kaggle":          "https://kaggle.com/{}",
+            "✍️ Wattpad":          "https://wattpad.com/user/{}",
+            "📚 Goodreads":       "https://goodreads.com/{}",
+            "🎯 Patreon":         "https://patreon.com/{}",
+            "☕ Ko-fi":            "https://ko-fi.com/{}",
+            # Asian / regional platforms
+            "🇨🇳 Weibo":           "https://weibo.com/n/{}",
+            "🇰🇷 Naver Blog":      "https://blog.naver.com/{}",
+            "🇷🇺 VK":              "https://vk.com/{}",
+            "🇩🇪 Xing":            "https://xing.com/profile/{}",
         }
         
         results = []
