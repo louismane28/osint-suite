@@ -22,60 +22,196 @@ if "pkg_resources" not in sys.modules:
     _m.resource_filename = lambda p, r: os.path.join("/tmp", r)
     sys.modules["pkg_resources"] = _m
 
-st.set_page_config(page_title="OSINT Suite", page_icon="🕵️", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="OSINT Suite", page_icon="🔬", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-.stApp{background:#020810;background-image:radial-gradient(ellipse 90% 55% at 15% 8%,rgba(0,180,255,.08) 0%,transparent 55%),radial-gradient(ellipse 70% 70% at 85% 90%,rgba(120,0,255,.07) 0%,transparent 55%),repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,255,255,.008) 3px,rgba(0,255,255,.008) 4px);min-height:100vh}
+
+/* ── Background ── */
+.stApp{
+  background:#020810;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% 5%, rgba(0,180,255,.10) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 60% at 80% 90%, rgba(100,0,255,.09) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 60% 40%, rgba(0,255,180,.04) 0%, transparent 50%);
+  min-height:100vh;
+}
+
+/* ── Animated scan-line grid ── */
+.stApp::before{
+  content:'';
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  background-image:
+    linear-gradient(rgba(0,195,255,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,195,255,.03) 1px, transparent 1px);
+  background-size:40px 40px;
+  pointer-events:none;
+  z-index:0;
+}
+
 body,.stApp,p,span,div,label{font-family:'Space Grotesk',sans-serif!important;color:#c0d8ee}
 h1,h2,h3,h4{font-family:'Share Tech Mono',monospace!important}
-.glass{background:linear-gradient(140deg,rgba(255,255,255,.065),rgba(255,255,255,.018));backdrop-filter:blur(22px) saturate(160%);border-radius:22px;border:1px solid rgba(255,255,255,.1);box-shadow:0 8px 36px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07);padding:1.3rem 1.5rem;margin:.6rem 0}
+
+/* ── Hero banner ── */
+.hero{
+  text-align:center;
+  padding:2.2rem 1rem 1rem;
+  position:relative;
+}
+.hero-logo{
+  font-size:4rem;
+  filter:drop-shadow(0 0 24px rgba(0,195,255,.6)) drop-shadow(0 0 48px rgba(0,195,255,.3));
+  animation:float 4s ease-in-out infinite;
+  display:block;
+  margin-bottom:.6rem;
+}
+.hero-title{
+  font-family:'Share Tech Mono',monospace!important;
+  font-size:2.4rem;font-weight:800;
+  background:linear-gradient(135deg,#ffffff 0%,#00ddff 45%,#9b72ff 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  letter-spacing:2px;
+  text-transform:uppercase;
+}
+.hero-sub{
+  color:#3d6070;font-size:.8rem;margin-top:.5rem;letter-spacing:1px;
+}
+.hero-badges{
+  display:flex;justify-content:center;gap:.5rem;flex-wrap:wrap;margin-top:.9rem;
+}
+.hbadge{
+  background:rgba(0,195,255,.07);
+  border:1px solid rgba(0,195,255,.2);
+  border-radius:30px;padding:3px 12px;
+  font-size:.7rem;color:#5fc8e8;
+  letter-spacing:.5px;
+}
+
+/* ── Glass cards ── */
+.glass{
+  background:linear-gradient(140deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
+  backdrop-filter:blur(24px) saturate(180%);
+  border-radius:20px;
+  border:1px solid rgba(255,255,255,.09);
+  box-shadow:0 8px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
+  padding:1.3rem 1.5rem;margin:.6rem 0;
+}
+
+/* ── Callout boxes ── */
 .tip{background:rgba(0,255,160,.05);border-left:3px solid #00ffaa;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0 .9rem;font-size:.875rem;color:#8ae8c4}
 .warn{background:rgba(255,170,0,.06);border-left:3px solid #ffaa00;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0;font-size:.875rem;color:#ffd070}
 .danger{background:rgba(255,50,50,.07);border-left:3px solid #ff4444;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0;color:#ff9090}
 .success-box{background:rgba(0,255,120,.07);border-left:3px solid #00ff88;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0;color:#80ffbb}
+
+/* ── Result cards ── */
 .rcard{background:rgba(0,195,255,.055);border:1px solid rgba(0,195,255,.14);border-radius:14px;padding:.7rem 1rem;margin:.35rem 0}
 .rcard a{color:#00e0ff;text-decoration:none}
 .badge-found{display:inline-block;background:rgba(0,255,130,.15);border:1px solid rgba(0,255,130,.5);border-radius:20px;padding:1px 9px;font-size:.72rem;color:#00ff88;margin-left:6px}
+
+/* ── Stat pills ── */
 .stat-row{display:flex;gap:10px;flex-wrap:wrap;margin:.7rem 0}
 .stat-pill{background:rgba(0,195,255,.07);border:1px solid rgba(0,195,255,.18);border-radius:40px;padding:4px 13px;font-size:.8rem;color:#6dd8f8}
+
+/* ── Section titles ── */
 .sec-title{font-family:'Share Tech Mono',monospace;font-size:1.1rem;font-weight:700;color:#d8f0ff;margin:1rem 0 .6rem;display:flex;align-items:center;gap:8px}
 .sec-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(0,195,255,.25),transparent);margin-left:8px}
-.stButton>button{background:linear-gradient(135deg,#00c0ff,#004ecc)!important;border:none!important;border-radius:50px!important;padding:.52rem 1.4rem!important;font-weight:600!important;color:#fff!important;box-shadow:0 4px 16px rgba(0,110,255,.38)!important;transition:all .2s!important}
-.stButton>button:hover{transform:translateY(-2px)!important;box-shadow:0 8px 26px rgba(0,110,255,.6)!important}
-.stTextInput input,.stTextArea textarea{background:rgba(8,18,32,.78)!important;border:1px solid rgba(0,195,255,.18)!important;border-radius:50px!important;color:#e2f2ff!important;font-family:'Share Tech Mono',monospace!important;font-size:.93rem!important;padding:.6rem 1.1rem!important}
+
+/* ── Buttons ── */
+.stButton>button{
+  background:linear-gradient(135deg,#00c0ff,#004ecc)!important;
+  border:none!important;border-radius:50px!important;
+  padding:.52rem 1.4rem!important;font-weight:600!important;
+  color:#fff!important;letter-spacing:.3px!important;
+  box-shadow:0 4px 20px rgba(0,110,255,.4)!important;
+  transition:all .2s!important;
+}
+.stButton>button:hover{transform:translateY(-2px)!important;box-shadow:0 8px 30px rgba(0,110,255,.65)!important}
+
+/* ── Inputs ── */
+.stTextInput input,.stTextArea textarea{
+  background:rgba(8,18,32,.85)!important;
+  border:1px solid rgba(0,195,255,.2)!important;
+  border-radius:50px!important;
+  color:#e2f2ff!important;
+  font-family:'Share Tech Mono',monospace!important;
+  font-size:.93rem!important;padding:.6rem 1.1rem!important;
+}
 .stTextArea textarea{border-radius:16px!important}
-.stTabs [data-baseweb="tab-list"]{display:flex!important;justify-content:center!important;flex-wrap:wrap!important;background:rgba(4,12,24,.82)!important;backdrop-filter:blur(18px)!important;border-radius:60px!important;padding:6px 12px!important;gap:4px!important;border:1px solid rgba(0,195,255,.14)!important;margin:0 auto!important;width:fit-content!important}
+
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"]{
+  display:flex!important;justify-content:center!important;flex-wrap:wrap!important;
+  background:rgba(4,12,24,.88)!important;backdrop-filter:blur(18px)!important;
+  border-radius:60px!important;padding:6px 12px!important;gap:4px!important;
+  border:1px solid rgba(0,195,255,.14)!important;
+  margin:0 auto 1rem!important;width:fit-content!important;
+}
 .stTabs [data-baseweb="tab"]{font-family:'Space Grotesk',sans-serif!important;font-weight:500!important;font-size:.75rem!important;color:#607a92!important;padding:.4rem 1rem!important;border-radius:40px!important;white-space:nowrap!important}
 .stTabs [aria-selected="true"]{background:linear-gradient(135deg,#00c0ff,#0050cc)!important;color:#fff!important;box-shadow:0 0 20px rgba(0,192,255,.45)!important}
+
 pre,code{font-family:'Share Tech Mono',monospace!important;font-size:.83rem!important}
 .stProgress>div>div>div{background:linear-gradient(90deg,#00c0ff,#00ff88)!important;border-radius:10px!important}
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:rgba(0,0,0,.25)}::-webkit-scrollbar-thumb{background:rgba(0,195,255,.28);border-radius:3px}
+
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes pulse-glow{0%,100%{box-shadow:0 0 20px rgba(0,195,255,.2)}50%{box-shadow:0 0 40px rgba(0,195,255,.5)}}
+
 .ldot{display:inline-block;width:7px;height:7px;background:#00ff88;border-radius:50%;animation:blink 1.8s infinite;margin-right:5px;vertical-align:middle}
+
+/* ── Feature grid on hero ── */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.6rem;margin:1.2rem 0}
+.feat-card{
+  background:linear-gradient(140deg,rgba(0,195,255,.06),rgba(0,195,255,.02));
+  border:1px solid rgba(0,195,255,.12);border-radius:16px;
+  padding:.8rem 1rem;text-align:center;
+  transition:all .2s;cursor:default;
+}
+.feat-card:hover{background:rgba(0,195,255,.1);border-color:rgba(0,195,255,.3);transform:translateY(-3px)}
+.feat-icon{font-size:1.5rem;display:block;margin-bottom:.3rem}
+.feat-label{font-size:.72rem;color:#5fc8e8;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
 </style>
 """, unsafe_allow_html=True)
 
+# ── Hero ────────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="text-align:center;padding:1.5rem 0 .4rem">
-  <div style="font-size:2.8rem;margin-bottom:.25rem">🕵️</div>
-  <div style="font-family:'Share Tech Mono',monospace;font-size:2rem;font-weight:800;background:linear-gradient(135deg,#fff,#00ddff 55%,#9b72ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent">OSINT Suite</div>
-  <div style="color:#3d6070;font-size:.75rem;margin-top:.45rem"><span class='ldot'></span>built by a curious dev · nothing stored · always free</div>
+<div class="hero">
+  <span class="hero-logo">🔬</span>
+  <div class="hero-title">OSINT Suite</div>
+  <div class="hero-sub"><span class="ldot"></span>open source intelligence · built by a dev who needed it · always free</div>
+  <div class="hero-badges">
+    <span class="hbadge">🔒 nothing stored</span>
+    <span class="hbadge">⚡ live lookups</span>
+    <span class="hbadge">🌐 14 tools in one</span>
+    <span class="hbadge">🔓 no login needed</span>
+  </div>
+</div>
+
+<div class="feat-grid">
+  <div class="feat-card"><span class="feat-icon">🔍</span><span class="feat-label">Reverse Image</span></div>
+  <div class="feat-card"><span class="feat-icon">👤</span><span class="feat-label">Username Hunt</span></div>
+  <div class="feat-card"><span class="feat-icon">📧</span><span class="feat-label">Email Intel</span></div>
+  <div class="feat-card"><span class="feat-icon">📁</span><span class="feat-label">File Metadata</span></div>
+  <div class="feat-card"><span class="feat-icon">🎯</span><span class="feat-label">CTF Solver</span></div>
+  <div class="feat-card"><span class="feat-icon">🔬</span><span class="feat-label">Deep File Scan</span></div>
+  <div class="feat-card"><span class="feat-icon">🌐</span><span class="feat-label">Network Recon</span></div>
+  <div class="feat-card"><span class="feat-icon">🔐</span><span class="feat-label">Password Tools</span></div>
 </div>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown("### 🕵️ OSINT Suite")
+    st.markdown("## 🔬 OSINT Suite")
     st.markdown("""
-I built this because I got tired of juggling 10 different sites to do basic research. Everything's in one place now.
+I built this because I got tired of jumping between 10 different tabs to do basic research. Everything's here now.
 
+**Tools:**
 - 🔍 Reverse Image Search
 - 👤 Username / Social Hunt
 - 📧 Email Intelligence
 - 📁 File & Photo Metadata
-- 🎯 CTF Solver (12 tools)
+- 🎯 CTF Solver (14 tools)
 - 🔬 Deep File Analysis
 - 🌐 Network & DNS Recon
 - 🔐 Password Utilities
@@ -1220,7 +1356,7 @@ Useful in CTFs when you need to generate a hash to compare with a target.
 
 
 st.markdown(
-    "<div style='text-align:center;color:#2a4050;font-size:.7rem;padding:.8rem 0 .4rem'>"
-    "OSINT Suite · built for learners and researchers · 2026"
+    "<div style='text-align:center;color:#1e3040;font-size:.7rem;padding:1.2rem 0 .4rem;letter-spacing:1px'>"
+    "🔬 OSINT Suite &nbsp;·&nbsp; open source intelligence &nbsp;·&nbsp; built for researchers, students & CTF players &nbsp;·&nbsp; 2026"
     "</div>",
     unsafe_allow_html=True)
