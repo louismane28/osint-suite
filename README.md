@@ -51,14 +51,6 @@ pip install -r requirements.txt
 streamlit run osint_suite.py
 ```
 
-### Deploy on Streamlit Cloud (free)
-
-[![Deploy](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io)
-
-1. Fork this repo
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. New app → select your fork → `main` → `osint_suite.py` → Deploy
-
 ---
 
 ## 🎯 Who is this for?
