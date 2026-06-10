@@ -154,13 +154,12 @@ with tab2:
 **How to use it:**
 1. Type the username (like `charlidamelio`) OR a real name (like `Charlie D'Amelio`)
 2. Pick whether it's a username or a full name
-3. Hit Search — it'll check all platforms and show you what it finds
+3. Hit **Search All Platforms** — it checks every site and shows what it finds
+4. If nothing comes back, scroll down for **manual links** to open each site yourself
 
-**What's a "username"?** It's the @handle someone uses online. Like @nasa on Instagram, or nasa on GitHub.
-
-**Tip:** If the person goes by different names on different sites, try both their real name and known usernames.
+**What's a "username"?** The @handle someone uses online — like @nasa on Instagram, or nasa on GitHub.
 """)
-    tip("Some platforms block automated checks. If you get no results, use the manual links at the bottom to open each site yourself.")
+    tip("Some platforms (especially TikTok and Instagram) block automated checks. Use the manual links at the bottom if automated search returns nothing.")
 
     col_q, col_m = st.columns([3, 1])
     with col_q:
@@ -255,6 +254,57 @@ with tab2:
                 for i, (pn, pu) in enumerate(quick):
                     with mc[i]:
                         st.link_button(pn, pu, use_container_width=True)
+
+    # ── TIKTOK FINDER ────────────────────────────────────────────────────
+    st.markdown("---")
+    sec("🎵 TikTok Finder")
+    st.markdown("""
+**TikTok-specific deep search.** Enter a real name or username and we'll generate every common TikTok handle variation and open them for you.
+
+**Why a separate TikTok section?** TikTok blocks most automated checks, so we generate all likely username variations and let you click directly.
+
+**How to use:**
+1. Type the name or username below
+2. Click **Find on TikTok** — it generates variants like `firstname`, `firstnamelast`, `itsfirstname`, etc.
+3. Click any link to open that profile directly on TikTok
+4. Use the **Search & Google** buttons to do a broader search
+""")
+    tip("TikTok usernames often drop spaces and sometimes add 'real', 'its', 'official', or numbers. We generate all of those.")
+
+    tt_query = st.text_input("Name or username to find on TikTok:", placeholder="Charlie D'Amelio  or  charlidamelio", key="tt_q")
+    if st.button("🎵 Find on TikTok", use_container_width=True, key="tt_go") and tt_query:
+        raw = tt_query.strip().lstrip('@').lower()
+        parts = raw.split()
+        f = parts[0] if parts else raw
+        l = parts[-1] if len(parts) > 1 else ""
+        tt_variants = list(dict.fromkeys(filter(None, [
+            raw.replace(" ", ""),
+            raw.replace(" ", "."),
+            raw.replace(" ", "_"),
+            f"{f}{l}" if l else "",
+            f"{f}.{l}" if l else "",
+            f"{f}_{l}" if l else "",
+            f"{f[0]}{l}" if l else "",
+            f"its{f}",
+            f"real{f}",
+            f"{f}official",
+            f"its{f}{l}" if l else "",
+            f"real{f}{l}" if l else "",
+            f"{f}{l}official" if l else "",
+            f"{f}{l}1" if l else "",
+            f"{f}{l}2" if l else "",
+        ])))
+
+        st.markdown(f"**Generated {len(tt_variants)} TikTok variants — click any to open:**")
+        cols = st.columns(3)
+        for i, v in enumerate(tt_variants):
+            with cols[i % 3]:
+                st.link_button(f"@{v}", f"https://tiktok.com/@{v}", use_container_width=True)
+
+        st.markdown("**Broader search:**")
+        bc1, bc2 = st.columns(2)
+        bc1.link_button("TikTok Search", f"https://tiktok.com/search/user?q={urllib.parse.quote(tt_query)}", use_container_width=True)
+        bc2.link_button("Google: site:tiktok.com", f"https://google.com/search?q=site:tiktok.com+{urllib.parse.quote(tt_query)}", use_container_width=True)
 
 
 # ── TAB 3: EMAIL ────────────────────────────────────────────────────────
@@ -356,21 +406,67 @@ Most social media (Instagram, Twitter) automatically removes this data, but phot
 with tab5:
     sec("CTF Solver")
 
-    with st.expander("🆕 Never done a CTF? Start here", expanded=False):
+    with st.expander("🆕 New to CTFs? Read this first — it explains everything", expanded=False):
         st.markdown("""
-**CTF = Capture The Flag.** It's a cybersecurity competition where you solve puzzles to find a hidden "flag" — usually a string like `CTF{s0me_secret_here}`.
+## What is a CTF?
 
-**The most common types of challenges:**
+**CTF = Capture The Flag.** It's a hacking competition where you solve puzzles to find a hidden secret called a "flag."
+Flags usually look like: `CTF{s0me_secret_here}` or `flag{this_is_the_answer}`.
 
-| Type | What you'll see | What to do |
-|------|----------------|------------|
-| **Encoding** | `dGhpcyBpcyBhIHRlc3Q=` or `Uryyb Jbeyq` | Use the Multi-Decoder below |
-| **Hash cracking** | `5f4dcc3b5aa765d61d8327deb882cf99` | Use Hash Identifier below |
-| **Steganography** | An image file with hidden data | Use Stego tools below |
-| **Web** | A login form or URL with weird parameters | Use Web Payloads below |
-| **Forensics** | A `.pcap` network capture or disk image | Use the Forensics guide below |
+You don't need to know how to hack to start. Most beginner challenges are just about recognizing patterns and using the right decoder.
 
-**Stuck on something?** Paste whatever you have into the Multi-Decoder first — it tries everything at once.
+---
+
+## Step 1 — Figure out what type of challenge it is
+
+| What you're given | Challenge type | Go to |
+|-------------------|---------------|-------|
+| A weird-looking text string | **Encoding/Cipher** | 🔤 Multi-Decoder |
+| A long string of letters/numbers (like `5f4dcc3b...`) | **Hash** | #️⃣ Hash Identifier |
+| An image file with a hidden message | **Steganography** | 🖼️ Steganography |
+| A website with a login form or weird URL | **Web** | 💉 Web Payloads |
+| A `.pcap` file (network traffic) or disk image | **Forensics** | 🔬 Forensics & PCAP |
+| Dots and dashes like `... --- ...` | **Morse code** | 🔤 Multi-Decoder → Morse |
+| `-----BEGIN ...-----` block | **JWT / Base64** | 🔤 Multi-Decoder |
+
+---
+
+## Step 2 — Recognize common encodings
+
+These are the most common things you'll see in beginner CTFs:
+
+**Base64** — ends with `=` or `==`, uses letters + numbers + `+/`
+> Example: `aGVsbG8gd29ybGQ=` → decodes to `hello world`
+
+**Hex** — only has characters `0-9` and `a-f`, usually in pairs
+> Example: `68656c6c6f` → decodes to `hello`
+
+**Binary** — only 0s and 1s, grouped in 8s
+> Example: `01101000 01101001` → decodes to `hi`
+
+**ROT13 / Caesar** — looks like English but the letters are wrong
+> Example: `Uryyb Jbeyq` → ROT13 → `Hello World`
+
+**Morse code** — dots, dashes, and spaces
+> Example: `.... . .-.. .-.. ---` → `HELLO`
+
+---
+
+## Step 3 — When you're stuck
+
+1. **Paste your text into Multi-Decoder → hit "Try Everything"** — it runs all decoders at once
+2. **Look at the length** — 32 chars = MD5 hash, 64 chars = SHA256
+3. **Google the exact string** — sometimes flags are in CTF writeups
+4. **Check the file** — run `strings file.bin | grep -i flag` to look for hidden text
+
+---
+
+## Good free resources for beginners
+
+- [PicoCTF](https://picoctf.org) — best beginner CTF platform, free, permanent
+- [Hack The Box](https://hackthebox.com) — more advanced, great labs
+- [CyberChef](https://gchq.github.io/CyberChef/) — drag-and-drop decoder for everything
+- [dCode.fr](https://dcode.fr/en) — identifies and decodes almost any cipher
         """)
 
     tool = st.selectbox("Pick a tool:", [
@@ -382,20 +478,26 @@ with tab5:
         "🔬 Forensics & PCAP",
         "🔢 Number Base Converter",
         "🔐 XOR Decoder",
+        "📡 Morse Code Decoder",
+        "🔑 JWT Decoder",
+        "🌐 URL Encoder / Decoder",
+        "📦 Base32 Decoder",
     ], key="ctf_tool")
 
     # ── MULTI DECODER ──────────────────────────────────────────────────
     if tool == "🔤 Multi-Decoder":
         st.markdown("""
-**Paste any encoded text here and click the button for whatever you want to try.**
+**Paste any encoded text and click a button to decode it.**
 
-Not sure what encoding it is? Hit **Try Everything** — it'll run through all of them and show whatever works.
+**Not sure what it is?** Hit **Try Everything** — it runs all decoders and shows whatever produces readable text.
 
-Common clues:
-- Ends with `=` or `==` → probably **Base64**
-- Only letters, looks like gibberish → might be **ROT13**
+**Quick identification guide:**
+- Ends with `=` or `==` and has mixed letters/numbers → **Base64**
+- Only letters, looks like scrambled English → probably **ROT13**
 - Only `0-9` and `a-f` characters → probably **Hex**
 - Only `0`s and `1`s → **Binary**
+- Dots, dashes, spaces → **Morse Code** (use the Morse decoder tool)
+- `%20`, `%3D`, `+` signs in URLs → **URL encoded**
         """)
         cipher = st.text_area("Paste your encoded text:", height=100,
                                placeholder="dGhpcyBpcyBhIHRlc3Q=   or   Uryyb Jbeyq   or   48656c6c6f", key="ctf_cipher")
@@ -758,6 +860,140 @@ If you don't know the key, try single-byte brute force — we'll try all 256 pos
                             ok(f"Key 0x{k:02x} ({k}): `{candidate.decode('ascii','replace')}`")
             except Exception as e:
                 danger(f"Error: {e}. Make sure the input is valid hex.")
+
+    # ── MORSE CODE ─────────────────────────────────────────────────────
+    elif tool == "📡 Morse Code Decoder":
+        st.markdown("""
+**Morse code** uses dots (`.`) and dashes (`-`) to represent letters. Each letter is separated by a space, each word by ` / ` or two spaces.
+
+**Examples:**
+- `.... .` → `HE`
+- `... --- ...` → `SOS`
+- `.... . .-.. .-.. ---` → `HELLO`
+
+Paste your Morse code below and click Decode.
+        """)
+        MORSE = {
+            '.-':'A','-.-.':'C','-..':'D','.':'E','..-.':'F','--.':'G','....':'H','..':'I',
+            '.---':'J','-.-':'K','.-..':'L','--':'M','-.':'N','---':'O','.--.':'P','--.-':'Q',
+            '.-.':'R','...':'S','-':'T','..-':'U','...-':'V','.--':'W','-..-':'X','-.--':'Y',
+            '--..':'Z','-----':'0','.----':'1','..---':'2','...--':'3','....-':'4',
+            '.....':'5','-....':'6','--...':'7','---..':'8','----.':'9',
+            '.-.-.-':'.','--..--':',','..--..':'?','.----.':'\'','-.-.--':'!',
+            '-..-.':'/','.--.-.':'@','...-..-':'$',
+            '-...':'B',
+        }
+        morse_in = st.text_area("Morse code:", height=80, placeholder=".... . .-.. .-.. ---   .-- --- .-. .-.. -..", key="morse_in")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Decode Morse → Text", use_container_width=True) and morse_in:
+                words = morse_in.strip().split('   ')
+                try:
+                    decoded = ' '.join(
+                        ''.join(MORSE.get(sym.strip(), '?') for sym in word.split())
+                        for word in words
+                    )
+                    ok(f"**Decoded:** {decoded}")
+                except Exception as e:
+                    danger(f"Error: {e}")
+        with c2:
+            encode_text = st.text_input("Or encode text → Morse:", placeholder="HELLO", key="morse_enc")
+            if encode_text:
+                REV_MORSE = {v: k for k, v in MORSE.items()}
+                encoded = '   '.join(
+                    ' '.join(REV_MORSE.get(ch.upper(), '?') for ch in word)
+                    for word in encode_text.split()
+                )
+                ok(f"**Morse:** {encoded}")
+
+    # ── JWT DECODER ────────────────────────────────────────────────────
+    elif tool == "🔑 JWT Decoder":
+        st.markdown("""
+**JWT = JSON Web Token.** It's a three-part token used for authentication, split by dots:
+`header.payload.signature`
+
+Each part is Base64-encoded. The payload contains claims like user ID, expiry time, and permissions.
+
+**In CTFs**, JWTs sometimes contain flags in the payload, or you can forge them by changing the algorithm to `none`.
+
+**How to use:** Paste the full JWT token below. We decode the header and payload — you can read everything except the signature.
+        """)
+        jwt_in = st.text_area("JWT token:", height=80, placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.xxx", key="jwt_in")
+        if st.button("Decode JWT", use_container_width=True) and jwt_in:
+            parts = jwt_in.strip().split('.')
+            if len(parts) != 3:
+                danger("Not a valid JWT — should have exactly 2 dots separating 3 parts.")
+            else:
+                import json as _json
+                for i, (label, part) in enumerate(zip(["Header", "Payload"], parts[:2])):
+                    try:
+                        pad = part + "=" * ((4 - len(part) % 4) % 4)
+                        decoded = base64.urlsafe_b64decode(pad).decode("utf-8", errors="replace")
+                        parsed = _json.loads(decoded)
+                        st.markdown(f"**{label}:**")
+                        st.json(parsed)
+                        # Flag detection
+                        flat = _json.dumps(parsed).lower()
+                        if any(x in flat for x in ['flag{', 'ctf{', 'flag']):
+                            ok(f"⚑ Possible flag found in {label}!")
+                    except Exception as e:
+                        danger(f"Couldn't decode {label}: {e}")
+                warn("Signature is NOT verified here — this only reads the data inside.")
+
+    # ── URL ENCODER / DECODER ──────────────────────────────────────────
+    elif tool == "🌐 URL Encoder / Decoder":
+        st.markdown("""
+**URL encoding** replaces special characters with `%XX` codes so they can be safely used in URLs.
+
+**Common in CTFs when:**
+- A URL has `%3D`, `%2F`, `%20` etc. in it
+- You need to inject a payload into a URL parameter
+- You're reading a web challenge and something looks weird in the URL
+
+**Examples:**
+- `hello world` → `hello%20world`
+- `flag{test}` → `flag%7Btest%7D`
+- `' OR 1=1--` → `%27%20OR%201%3D1--`
+        """)
+        url_in = st.text_area("Text to encode or decode:", height=80, placeholder="hello world  or  hello%20world", key="url_in")
+        if url_in:
+            c1, c2 = st.columns(2)
+            with c1:
+                encoded = urllib.parse.quote(url_in.strip(), safe='')
+                st.markdown("**URL Encoded:**")
+                st.code(encoded)
+            with c2:
+                decoded = urllib.parse.unquote(url_in.strip())
+                st.markdown("**URL Decoded:**")
+                st.code(decoded)
+            # Double-encoded detection
+            if '%25' in url_in:
+                warn("Looks double-encoded (has `%25`). Click URL Decoded twice to fully decode.")
+
+    # ── BASE32 ────────────────────────────────────────────────────────
+    elif tool == "📦 Base32 Decoder":
+        st.markdown("""
+**Base32** is similar to Base64 but only uses uppercase letters A-Z and digits 2-7.
+It's used in some CTFs, OTP/2FA seeds, and Tor `.onion` addresses.
+
+**How to identify it:** All uppercase, only A-Z and 2-7, usually ends with `=` or `====`.
+> Example: `JBSWY3DPEBLW64TMMQ======` → decodes to `Hello, World!`
+        """)
+        b32_in = st.text_area("Base32 text:", height=80, placeholder="JBSWY3DPEBLW64TMMQ======", key="b32_in")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Decode Base32", use_container_width=True) and b32_in:
+                try:
+                    pad = b32_in.strip().upper()
+                    pad += "=" * ((8 - len(pad) % 8) % 8)
+                    result = base64.b32decode(pad).decode("utf-8", errors="replace")
+                    ok(f"**Decoded:** {result}")
+                except Exception as e:
+                    danger(f"Not valid Base32: {e}")
+        with c2:
+            b32_enc = st.text_input("Or encode text → Base32:", placeholder="Hello, World!", key="b32_enc")
+            if b32_enc:
+                ok(f"**Base32:** {base64.b32encode(b32_enc.encode()).decode()}")
 
 
 # ── TAB 6: DEEP FILE SCAN ───────────────────────────────────────────────
