@@ -54,6 +54,14 @@ st.markdown("""
 }
 
 body,.stApp,p,span,div,label{font-family:'Space Grotesk',sans-serif!important;color:#c0d8ee}
+/* exclude Material Icons spans from font override */
+[data-testid="stIconMaterial"],
+.material-icons,
+.material-symbols-rounded,
+span[class*="icon"],
+button span,
+.stButton span,
+[data-baseweb] span[aria-hidden]{font-family:'Material Icons','Material Symbols Rounded',sans-serif!important}
 h1,h2,h3,h4{font-family:'Share Tech Mono',monospace!important}
 
 /* ── Hero ── */
@@ -1096,65 +1104,233 @@ Shows up in CTFs, OTP/2FA seeds, and Tor `.onion` addresses.
                 ok(f"**Base32:** {base64.b32encode(b32_enc.encode()).decode()}")
 
 
-# ── TAB 6: DEEP FILE SCAN ───────────────────────────────────────────────
+# ── TAB 6: DEEP SCAN (AperiSolve-style) ────────────────────────────────
 with tab6:
-    sec("Deep File Scan")
+    sec("Deep Image Analysis")
     st.markdown("""
-Upload any file — image, PDF, zip, binary, whatever — and I'll tear it apart:
-
-- **SHA256 hash** — useful for verifying a file hasn't been tampered with
-- **Entropy score** — high entropy (near 8.0) means the file is encrypted or packed. Low entropy (~3-4) means plain text
-- **Readable strings** — pulls out every readable string from the raw bytes
-- **Entropy heatmap** — visual breakdown showing which parts of the file are compressed/encrypted (red) vs normal (blue)
-
-This is how malware analysts start looking at suspicious files.
+Upload an image and this runs the same battery of checks that AperiSolve does — all in-browser, no external uploads needed.
+Covers LSB steganography, color channel isolation, all 8 bit planes, EXIF data, entropy analysis, embedded file detection, and string extraction.
     """)
-    tip("Encrypted sections show up bright red on the heatmap. If a file claims to be a plain document but the heatmap is mostly red, something's off.")
+    tip("Start here for any stego CTF challenge. Upload the image and scroll through each section.")
 
-    deep_f = st.file_uploader("Choose a file", key="deep_f")
+    deep_f = st.file_uploader("Upload an image", type=["png","jpg","jpeg","bmp","gif","tiff","webp"], key="deep_f")
+
     if deep_f:
-        fb = deep_f.getvalue()
+        import numpy as np
+        raw = deep_f.getvalue()
         fname = deep_f.name
-        md5h = hashlib.md5(fb).hexdigest()
-        sha256h = hashlib.sha256(fb).hexdigest()
-        glass(f"<b>{fname}</b><br>Size: {len(fb):,} bytes<br>MD5: <code>{md5h}</code><br>SHA256: <code>{sha256h}</code>")
 
-        if len(fb) > 0:
-            freq = Counter(fb)
-            probs = [freq[b] / len(fb) for b in freq]
-            entropy = -sum(p * math.log2(p) for p in probs if p > 0)
-            st.metric("Shannon Entropy", f"{entropy:.2f} / 8.0",
-                      help="7-8 = encrypted/compressed. 0-4 = plain text.")
+        try:
+            img = Image.open(io.BytesIO(raw)).convert("RGB")
+        except Exception as e:
+            danger(f"Couldn't open image: {e}")
+            st.stop()
 
-            # Entropy heatmap — fixed column count
-            n_blocks = min(64, len(fb))
-            bsz = max(1, len(fb) // n_blocks)
+        arr = np.array(img)
+        w, h = img.size
+
+        # ── Overview ───────────────────────────────────────────────────
+        md5h   = hashlib.md5(raw).hexdigest()
+        sha256h = hashlib.sha256(raw).hexdigest()
+        glass(
+            f"<b>{fname}</b> &nbsp; {w}×{h}px &nbsp; {img.mode}<br>"
+            f"Size: {len(raw):,} bytes<br>"
+            f"MD5: <code>{md5h}</code><br>"
+            f"SHA256: <code>{sha256h}</code>"
+        )
+
+        # expected size vs actual (padding = hidden data indicator)
+        expected = w * h * 3
+        ratio = len(raw) / max(expected, 1)
+        if ratio > 1.4:
+            warn(f"File is {ratio:.1f}x larger than expected for its dimensions — possible embedded data.")
+        else:
+            ok(f"File size looks normal for {w}×{h} ({ratio:.2f}x expected).")
+
+        st.markdown("---")
+
+        # ── EXIF ───────────────────────────────────────────────────────
+        sec("EXIF Metadata")
+        try:
+            exif_img = Image.open(io.BytesIO(raw))
+            exif = exif_img._getexif() if hasattr(exif_img, '_getexif') else None
+            if exif:
+                human = {ExifTags.TAGS.get(k, str(k)): str(v)[:300] for k, v in exif.items()}
+                gps_keys = [k for k in human if "GPS" in k]
+                if gps_keys:
+                    danger(f"GPS data found! ({', '.join(gps_keys)}) — this image has location info embedded.")
+                else:
+                    ok("No GPS data in EXIF.")
+                with st.expander(f"All EXIF fields ({len(human)})"):
+                    st.json(human)
+            else:
+                st.info("No EXIF data found.")
+        except:
+            st.info("Could not read EXIF.")
+
+        st.markdown("---")
+
+        # ── Entropy ────────────────────────────────────────────────────
+        sec("Entropy Analysis")
+        freq = Counter(raw)
+        probs = [freq[b] / len(raw) for b in freq]
+        entropy = -sum(p * math.log2(p) for p in probs if p > 0)
+        ecol1, ecol2 = st.columns([1, 3])
+        with ecol1:
+            st.metric("Shannon Entropy", f"{entropy:.3f} / 8.0")
+            if entropy > 7.2:
+                warn("Very high entropy — possible encryption or compression inside.")
+            elif entropy > 6.0:
+                st.info("Moderate entropy — normal for compressed images.")
+            else:
+                ok("Low entropy — plain / unencrypted content.")
+        with ecol2:
+            # heatmap
+            n_blocks = 64
+            bsz = max(1, len(raw) // n_blocks)
             ents = []
-            for i in range(0, len(fb), bsz):
-                blk = fb[i:i+bsz]
+            for i in range(0, len(raw), bsz):
+                blk = raw[i:i+bsz]
                 if blk:
-                    fq = Counter(blk)
-                    pv = [fq[b] / len(blk) for b in fq]
-                    ents.append(-sum(p * math.log2(p) for p in pv if p > 0))
+                    fq = Counter(blk); pv = [fq[b]/len(blk) for b in fq]
+                    ents.append(-sum(p*math.log2(p) for p in pv if p > 0))
             n = min(64, len(ents))
-            if n > 0:
-                st.markdown("**Entropy heatmap** (blue = low / normal, red = encrypted/compressed):")
-                cols = st.columns(n)
-                for idx in range(n):
-                    e = ents[idx]
-                    color = f"hsl({int(240 - e * 30)}, 80%, 50%)"
-                    cols[idx].markdown(
-                        f"<div style='background:{color};height:24px;border-radius:4px;' title='{e:.2f}'></div>",
-                        unsafe_allow_html=True)
+            st.markdown("Entropy heatmap — blue=normal, red=encrypted/packed:")
+            cols = st.columns(n)
+            for i in range(n):
+                e = ents[i]
+                cols[i].markdown(
+                    f"<div style='background:hsl({int(240-e*30)},80%,50%);height:22px;border-radius:3px' title='{e:.2f}'></div>",
+                    unsafe_allow_html=True)
 
-        strings_found = re.findall(rb"[\x20-\x7E]{4,}", fb)
+        st.markdown("---")
+
+        # ── Color Channel Separation ────────────────────────────────────
+        sec("Color Channel Separation")
+        st.markdown("Splitting the image into R, G, B channels. Hidden data sometimes only appears in one channel.")
+        r, g, b = img.split()
+        ch_cols = st.columns(3)
+        for col, ch, label, color in zip(ch_cols, [r, g, b], ["Red", "Green", "Blue"], ["Reds","Greens","Blues"]):
+            ch_rgb = Image.merge("RGB", [
+                ch if label == "Red" else Image.new("L", img.size, 0),
+                ch if label == "Green" else Image.new("L", img.size, 0),
+                ch if label == "Blue" else Image.new("L", img.size, 0),
+            ])
+            col.image(ch_rgb, caption=label, use_container_width=True)
+
+        st.markdown("---")
+
+        # ── Bit Plane Viewer ────────────────────────────────────────────
+        sec("Bit Plane Viewer")
+        st.markdown("LSB (bit 0) is where steganography tools hide data. If the LSB plane looks noisy or patterned (not random), there's likely hidden data.")
+        bp_channel = st.radio("Channel:", ["Red", "Green", "Blue"], horizontal=True, key="bp_ch")
+        ch_map = {"Red": 0, "Green": 1, "Blue": 2}
+        ch_arr = arr[:, :, ch_map[bp_channel]]
+        bp_cols = st.columns(4)
+        for bit in range(8):
+            plane = ((ch_arr >> bit) & 1) * 255
+            bp_img = Image.fromarray(plane.astype("uint8"), "L")
+            bp_cols[bit % 4].image(bp_img, caption=f"Bit {bit} {'(LSB)' if bit==0 else '(MSB)' if bit==7 else ''}", use_container_width=True)
+
+        st.markdown("---")
+
+        # ── LSB Extraction ──────────────────────────────────────────────
+        sec("LSB Data Extraction")
+        st.markdown("Extracts the least significant bit from every pixel and tries to decode it as text. This is exactly how tools like zsteg and StegSolve work.")
+        lsb_ch = st.radio("Extract from:", ["Red", "Green", "Blue", "All channels"], horizontal=True, key="lsb_ch")
+
+        if st.button("Extract LSB", use_container_width=True, key="lsb_go"):
+            if lsb_ch == "All channels":
+                bits = (arr & 1).flatten()
+            else:
+                bits = (arr[:, :, ch_map[lsb_ch]] & 1).flatten()
+
+            # Pack bits into bytes
+            n_bytes = len(bits) // 8
+            lsb_bytes = bytes(
+                int("".join(str(b) for b in bits[i*8:(i+1)*8]), 2)
+                for i in range(min(n_bytes, 2000))
+            )
+            # Try to find readable text
+            printable = re.findall(rb"[\x20-\x7E]{4,}", lsb_bytes)
+            interesting = [s.decode("ascii","ignore") for s in printable
+                           if any(k in s.decode("ascii","ignore").lower()
+                                  for k in ["flag","ctf","key","secret","pass","hidden","{","}"])]
+            if interesting:
+                ok(f"Found {len(interesting)} interesting string(s) in LSB data:")
+                for s in interesting[:20]:
+                    st.code(s)
+            elif printable:
+                ok(f"Found {len(printable)} readable string(s) in LSB (no obvious flags):")
+                for s in printable[:10]:
+                    st.code(s.decode("ascii","ignore"))
+            else:
+                st.info("No readable text found in LSB. The data might be encrypted, or there's nothing hidden.")
+
+            # Show raw hex preview
+            with st.expander("Raw LSB bytes (hex preview, first 256 bytes)"):
+                st.code(lsb_bytes[:256].hex())
+
+        st.markdown("---")
+
+        # ── Embedded File Check ─────────────────────────────────────────
+        sec("Embedded File Signatures")
+        st.markdown("Scanning the raw bytes for known file headers — a common trick is to append a ZIP, PDF, or another image inside a PNG.")
+        SIGS = {
+            b"\xff\xd8\xff": "JPEG",
+            b"\x89PNG": "PNG",
+            b"GIF8": "GIF",
+            b"PK\x03\x04": "ZIP / JAR",
+            b"%PDF": "PDF",
+            b"Rar!": "RAR",
+            b"\x1f\x8b": "GZIP",
+            b"BZh": "BZIP2",
+            b"7z\xbc\xaf": "7-Zip",
+            b"\x00\x00\x00\x18ftypmp4": "MP4",
+            b"RIFF": "WAV/AVI",
+            b"<!DOCTYPE": "HTML",
+            b"<?xml": "XML",
+            b"-----BEGIN": "PEM/Certificate",
+        }
+        found_sigs = []
+        for sig, label in SIGS.items():
+            pos = 0
+            while True:
+                idx = raw.find(sig, pos)
+                if idx == -1: break
+                if idx > 4:  # skip the file's own header at position 0
+                    found_sigs.append((label, idx))
+                pos = idx + 1
+        if found_sigs:
+            danger(f"Found {len(found_sigs)} embedded file signature(s):")
+            for label, offset in found_sigs[:20]:
+                rcard(f"<b>{label}</b> at byte offset <code>{offset:,}</code>")
+            st.download_button("📥 Download raw bytes for manual extraction",
+                               raw, file_name=f"{fname}_raw.bin")
+        else:
+            ok("No embedded file signatures found.")
+
+        st.markdown("---")
+
+        # ── String Extraction ───────────────────────────────────────────
+        sec("Readable Strings")
+        strings_found = re.findall(rb"[\x20-\x7E]{5,}", raw)
         if strings_found:
-            unique_strings = list(dict.fromkeys(s.decode("ascii", "ignore") for s in strings_found))
-            with st.expander(f"🔤 Readable strings found ({len(unique_strings)}) — click to expand"):
-                st.code("\n".join(unique_strings[:100]))
-            st.download_button("📥 Download all strings as .txt",
-                               "\n".join(unique_strings[:500]),
-                               file_name=f"{fname}_strings.txt")
+            unique_str = list(dict.fromkeys(s.decode("ascii","ignore") for s in strings_found))
+            flaggy = [s for s in unique_str if any(k in s.lower() for k in ["flag","ctf","{","key","secret","pass"])]
+            if flaggy:
+                ok(f"Flaggy strings found:")
+                for s in flaggy[:20]: st.code(s)
+            with st.expander(f"All readable strings ({len(unique_str)})"):
+                st.code("\n".join(unique_str[:200]))
+            st.download_button("📥 Download strings (.txt)", "\n".join(unique_str), file_name=f"{fname}_strings.txt")
+        else:
+            st.info("No readable strings found.")
+
+        st.markdown("---")
+
+        # ── Non-image files fallback ────────────────────────────────────
+        st.caption("For non-image files (zip, pdf, binary), use the strings and entropy sections above — they work on any file type.")
 
 
 # ── TAB 7: NETWORK RECON ────────────────────────────────────────────────
