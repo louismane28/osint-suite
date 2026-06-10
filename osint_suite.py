@@ -62,24 +62,25 @@ st.markdown("""
 <div style="text-align:center;padding:1.5rem 0 .4rem">
   <div style="font-size:2.8rem;margin-bottom:.25rem">🕵️</div>
   <div style="font-family:'Share Tech Mono',monospace;font-size:2rem;font-weight:800;background:linear-gradient(135deg,#fff,#00ddff 55%,#9b72ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent">OSINT Suite</div>
-  <div style="color:#3d6070;font-size:.75rem;margin-top:.45rem"><span class='ldot'></span>live lookups · nothing stored · free to use</div>
+  <div style="color:#3d6070;font-size:.75rem;margin-top:.45rem"><span class='ldot'></span>built by a curious dev · nothing stored · always free</div>
 </div>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("### 🕵️ OSINT Suite")
     st.markdown("""
-Tools inside:
-- 🔍 Reverse Image
-- 👤 Username & Social Media
-- 📧 Email Lookup
-- 📁 File Metadata
-- 🎯 CTF Solver
-- 🔬 Deep File Scan
-- 🌐 Network Recon
-- 🔐 Password Tools
+I built this because I got tired of juggling 10 different sites to do basic research. Everything's in one place now.
+
+- 🔍 Reverse Image Search
+- 👤 Username / Social Hunt
+- 📧 Email Intelligence
+- 📁 File & Photo Metadata
+- 🎯 CTF Solver (12 tools)
+- 🔬 Deep File Analysis
+- 🌐 Network & DNS Recon
+- 🔐 Password Utilities
     """)
-    st.caption("Everything runs in your browser. No accounts, no tracking.")
+    st.caption("No login. No tracking. No BS.")
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🔍 Image", "👤 Social Media", "📧 Email", "📁 Metadata",
@@ -102,16 +103,13 @@ def pills(pairs):
 with tab1:
     sec("Reverse Image Search")
     st.markdown("""
-**What is this?** Upload a photo and we'll host it for you, then you can run it through Google, Yandex, Bing, and TinEye with one click.
+Drop a photo here and I'll upload it to a temp host, then open it in Google, Yandex, Bing, and TinEye for you — all with one click instead of four.
 
-**When is this useful?**
-- You want to find out who someone is from a photo
-- You want to check if a photo has been used elsewhere online
-- You found an image and want to trace where it originally came from
+**Good for:** finding out who someone is, checking if a photo is stolen or fake, tracing where an image originally came from.
 """)
-    tip("Best results: use a clear, unedited photo. Cropped headshots work better than group photos for face searches.")
+    tip("Cropped headshots work way better than full group photos. Clear, unedited photos give the best results.")
 
-    img_file = st.file_uploader("Pick an image to search", type=["jpg","png","jpeg","webp","gif"], key="rev_img")
+    img_file = st.file_uploader("Drop your image here", type=["jpg","png","jpeg","webp","gif"], key="rev_img")
     if img_file:
         img_bytes = img_file.getvalue()
         c1, c2 = st.columns([1, 2])
@@ -119,7 +117,7 @@ with tab1:
             st.image(img_bytes, width=210, caption=img_file.name)
         with c2:
             pills([("File", img_file.name), ("Size", f"{max(1,len(img_bytes)//1024)} KB")])
-            with st.spinner("Uploading image..."):
+            with st.spinner("Uploading..."):
                 try:
                     r = requests.post("https://tmpfiles.org/api/v1/upload",
                                       files={"file": (img_file.name, img_bytes)}, timeout=20)
@@ -127,7 +125,7 @@ with tab1:
                         raw_url = r.json()["data"]["url"]
                         direct = raw_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
                         enc = urllib.parse.quote_plus(direct)
-                        ok("Image uploaded. Click a search engine below:")
+                        ok("Uploaded. Pick a search engine:")
                         engines = {
                             "Google Lens": f"https://lens.google.com/uploadbyurl?url={enc}",
                             "Yandex": f"https://yandex.com/images/search?rpt=imageview&url={enc}",
@@ -138,7 +136,7 @@ with tab1:
                         for i, (name, url) in enumerate(engines.items()):
                             with cols[i % 2]:
                                 st.link_button(name, url, use_container_width=True)
-                        st.caption(f"Direct link (valid ~60 min): {direct}")
+                        st.caption(f"Direct link (expires ~60 min): {direct}")
                     else:
                         danger("Upload failed. Try a smaller JPEG.")
                 except Exception as e:
@@ -149,17 +147,12 @@ with tab1:
 with tab2:
     sec("Social Media & Username Search")
     st.markdown("""
-**What does this do?** You give it a username or a real name, and it checks 20+ platforms to see if that account exists — TikTok, Instagram, Twitter/X, GitHub, YouTube, LinkedIn, and more.
+Type a username or a real name and this will check 20+ platforms at once — TikTok, Instagram, Twitter/X, GitHub, Reddit, YouTube, and more.
 
-**How to use it:**
-1. Type the username (like `charlidamelio`) OR a real name (like `Charlie D'Amelio`)
-2. Pick whether it's a username or a full name
-3. Hit **Search All Platforms** — it checks every site and shows what it finds
-4. If nothing comes back, scroll down for **manual links** to open each site yourself
+**Using a real name?** Switch to "Full name" mode and it'll automatically generate the most common username variations people use (like `johnsmith`, `john.smith`, `john_smith`, `itsjohn`, etc.) and check those too.
 
-**What's a "username"?** The @handle someone uses online — like @nasa on Instagram, or nasa on GitHub.
+**Heads up:** TikTok and Instagram usually block automated checks. If you get no results, scroll down — there's a manual TikTok finder and direct links you can click yourself.
 """)
-    tip("Some platforms (especially TikTok and Instagram) block automated checks. Use the manual links at the bottom if automated search returns nothing.")
 
     col_q, col_m = st.columns([3, 1])
     with col_q:
@@ -259,17 +252,11 @@ with tab2:
     st.markdown("---")
     sec("🎵 TikTok Finder")
     st.markdown("""
-**TikTok-specific deep search.** Enter a real name or username and we'll generate every common TikTok handle variation and open them for you.
+TikTok specifically blocks most bots, so the search above often misses it. This section generates every realistic username variation for that person and gives you clickable buttons to check each one directly.
 
-**Why a separate TikTok section?** TikTok blocks most automated checks, so we generate all likely username variations and let you click directly.
-
-**How to use:**
-1. Type the name or username below
-2. Click **Find on TikTok** — it generates variants like `firstname`, `firstnamelast`, `itsfirstname`, etc.
-3. Click any link to open that profile directly on TikTok
-4. Use the **Search & Google** buttons to do a broader search
+Enter a name or known username, hit the button, and click whichever profiles look right.
 """)
-    tip("TikTok usernames often drop spaces and sometimes add 'real', 'its', 'official', or numbers. We generate all of those.")
+    tip("People on TikTok often go by something like `itsfirstname`, `realfirstname`, `firstlast`, or add numbers at the end. We generate all of those.")
 
     tt_query = st.text_input("Name or username to find on TikTok:", placeholder="Charlie D'Amelio  or  charlidamelio", key="tt_q")
     if st.button("🎵 Find on TikTok", use_container_width=True, key="tt_go") and tt_query:
@@ -309,17 +296,17 @@ with tab2:
 
 # ── TAB 3: EMAIL ────────────────────────────────────────────────────────
 with tab3:
-    sec("Email Lookup")
+    sec("Email Intelligence")
     st.markdown("""
-**What does this do?** Enter an email address and we'll:
-- Check if there's a Gravatar (profile picture) linked to it
-- Look up its reputation — is it legit or is it tied to spam?
-- Give you a direct link to check if it appeared in any data breaches
+Enter an email and I'll do three things:
 
-**What's a data breach?** When a website gets hacked and user passwords/emails get leaked online.
-HaveIBeenPwned keeps a database of those leaks so you can check if an email was exposed.
+1. **Check for a linked profile picture** (Gravatar) — a lot of people have one without realizing it
+2. **Look up its reputation** — is this a real address or a known spam/throwaway account?
+3. **Link you to breach check** — see if this email showed up in any hacked databases
+
+A "data breach" is when a site gets hacked and their user emails/passwords leak online. HaveIBeenPwned tracks those leaks.
 """)
-    tip("This works best with personal or business emails. Disposable email services (like guerrillamail) usually have low reputation scores.")
+    tip("Works best on real personal or work emails. Throwaway services like guerrillamail will almost always come back low reputation.")
 
     email_in = st.text_input("Email address", placeholder="someone@example.com", key="email_in")
     if st.button("Look Up", use_container_width=True, key="email_go") and email_in:
@@ -370,16 +357,13 @@ HaveIBeenPwned keeps a database of those leaks so you can check if an email was 
 with tab4:
     sec("File Metadata & EXIF")
     st.markdown("""
-**What is EXIF data?** Every photo taken on a phone or camera stores hidden information inside the file — things like:
-- What camera or phone took the photo
-- The exact GPS coordinates of where it was taken
-- The date and time it was taken
-- Software used to edit it
+Every photo your phone takes secretly stores a bunch of info inside the file — the exact GPS location, what device took it, the date and time, even what software edited it. This is called EXIF data.
 
-**Why does this matter?** Criminals have been caught because they forgot to strip GPS data before posting photos online.
-Most social media (Instagram, Twitter) automatically removes this data, but photos shared directly often still have it.
+People have been caught by law enforcement and doxxed because they shared photos without stripping this data first.
+
+Upload a photo here and I'll pull all of it out for you.
 """)
-    tip("Try uploading a photo taken on your phone — you might be surprised what's stored in it.")
+    tip("Instagram, Twitter, and most social media strip EXIF when you upload. But photos sent directly via iMessage, email, or file share usually still have everything.")
 
     meta_file = st.file_uploader("Upload an image", type=["jpg","jpeg","png","tiff","webp"], key="meta_f")
     if meta_file:
@@ -406,73 +390,52 @@ Most social media (Instagram, Twitter) automatically removes this data, but phot
 with tab5:
     sec("CTF Solver")
 
-    with st.expander("🆕 New to CTFs? Read this first — it explains everything", expanded=False):
+    with st.expander("🆕 Never done a CTF before? Open this first.", expanded=False):
         st.markdown("""
-## What is a CTF?
+**CTF = Capture The Flag.** You get a puzzle, you solve it, you find a hidden string called a flag. Usually looks like `CTF{s0mething_here}` or `flag{answer}`.
 
-**CTF = Capture The Flag.** It's a hacking competition where you solve puzzles to find a hidden secret called a "flag."
-Flags usually look like: `CTF{s0me_secret_here}` or `flag{this_is_the_answer}`.
-
-You don't need to know how to hack to start. Most beginner challenges are just about recognizing patterns and using the right decoder.
+You don't need to be a hacker to start. A huge chunk of beginner challenges are just about recognizing an encoding and using the right decoder — which is exactly what this page does.
 
 ---
 
-## Step 1 — Figure out what type of challenge it is
+**Step 1: Figure out what you have**
 
-| What you're given | Challenge type | Go to |
-|-------------------|---------------|-------|
-| A weird-looking text string | **Encoding/Cipher** | 🔤 Multi-Decoder |
-| A long string of letters/numbers (like `5f4dcc3b...`) | **Hash** | #️⃣ Hash Identifier |
-| An image file with a hidden message | **Steganography** | 🖼️ Steganography |
-| A website with a login form or weird URL | **Web** | 💉 Web Payloads |
-| A `.pcap` file (network traffic) or disk image | **Forensics** | 🔬 Forensics & PCAP |
-| Dots and dashes like `... --- ...` | **Morse code** | 🔤 Multi-Decoder → Morse |
-| `-----BEGIN ...-----` block | **JWT / Base64** | 🔤 Multi-Decoder |
-
----
-
-## Step 2 — Recognize common encodings
-
-These are the most common things you'll see in beginner CTFs:
-
-**Base64** — ends with `=` or `==`, uses letters + numbers + `+/`
-> Example: `aGVsbG8gd29ybGQ=` → decodes to `hello world`
-
-**Hex** — only has characters `0-9` and `a-f`, usually in pairs
-> Example: `68656c6c6f` → decodes to `hello`
-
-**Binary** — only 0s and 1s, grouped in 8s
-> Example: `01101000 01101001` → decodes to `hi`
-
-**ROT13 / Caesar** — looks like English but the letters are wrong
-> Example: `Uryyb Jbeyq` → ROT13 → `Hello World`
-
-**Morse code** — dots, dashes, and spaces
-> Example: `.... . .-.. .-.. ---` → `HELLO`
+| What it looks like | What it probably is | Use this tool |
+|---|---|---|
+| `aGVsbG8=` — mixed letters, ends in `=` | Base64 | 🔤 Multi-Decoder |
+| `68656c6c6f` — only 0-9 and a-f | Hex | 🔤 Multi-Decoder |
+| `01101000 01101001` — only 0s and 1s | Binary | 🔤 Multi-Decoder |
+| `Uryyb Jbeyq` — looks like English but wrong | ROT13 / Caesar | 🔄 Caesar Brute Force |
+| `.... . .-.. .-.. ---` — dots and dashes | Morse code | 📡 Morse Decoder |
+| `5f4dcc3b...` — 32 chars, hex | MD5 hash | #️⃣ Hash Identifier |
+| `eyJhbG...` — starts with `eyJ` | JWT token | 🔑 JWT Decoder |
+| `JBSWY3DP...` — all caps, 2-7 only | Base32 | 📦 Base32 |
+| `Wkdv lv d whvw` — shifted letters | Vigenère / Caesar | 🔄 Caesar or 🔑 Vigenère |
+| Image file that seems too large | Steganography | 🖼️ Stego |
 
 ---
 
-## Step 3 — When you're stuck
+**Step 2: Still stuck?**
 
-1. **Paste your text into Multi-Decoder → hit "Try Everything"** — it runs all decoders at once
-2. **Look at the length** — 32 chars = MD5 hash, 64 chars = SHA256
-3. **Google the exact string** — sometimes flags are in CTF writeups
-4. **Check the file** — run `strings file.bin | grep -i flag` to look for hidden text
+- Paste whatever you have into **Multi-Decoder → Try Everything** first
+- If it's 32 chars of hex → it's probably an MD5. Paste it in **Hash Identifier** then try **CrackStation**
+- If it looks like English but slightly off → **Caesar Brute Force** will show all 25 shifts
+- Google the exact string — CTF writeups are public and people post solutions
 
 ---
 
-## Good free resources for beginners
-
-- [PicoCTF](https://picoctf.org) — best beginner CTF platform, free, permanent
-- [Hack The Box](https://hackthebox.com) — more advanced, great labs
-- [CyberChef](https://gchq.github.io/CyberChef/) — drag-and-drop decoder for everything
-- [dCode.fr](https://dcode.fr/en) — identifies and decodes almost any cipher
+**Free places to practice:**
+- [PicoCTF](https://picoctf.org) — best for beginners, totally free, permanent challenges
+- [Hack The Box](https://hackthebox.com) — harder, but great for leveling up
+- [CTFtime.org](https://ctftime.org) — calendar of every upcoming CTF
         """)
 
     tool = st.selectbox("Pick a tool:", [
         "🔤 Multi-Decoder",
         "#️⃣ Hash Identifier & Cracker",
         "🔄 Caesar / ROT Brute Force",
+        "🔑 Vigenère Cipher",
+        "🔁 Atbash Decoder",
         "🖼️ Steganography",
         "💉 Web Payloads",
         "🔬 Forensics & PCAP",
@@ -487,17 +450,14 @@ These are the most common things you'll see in beginner CTFs:
     # ── MULTI DECODER ──────────────────────────────────────────────────
     if tool == "🔤 Multi-Decoder":
         st.markdown("""
-**Paste any encoded text and click a button to decode it.**
+Paste whatever encoded text you have and hit a button. If you have no idea what it is, use **Try Everything** — it'll run every decoder and show you what actually produces readable text.
 
-**Not sure what it is?** Hit **Try Everything** — it runs all decoders and shows whatever produces readable text.
-
-**Quick identification guide:**
-- Ends with `=` or `==` and has mixed letters/numbers → **Base64**
-- Only letters, looks like scrambled English → probably **ROT13**
-- Only `0-9` and `a-f` characters → probably **Hex**
-- Only `0`s and `1`s → **Binary**
-- Dots, dashes, spaces → **Morse Code** (use the Morse decoder tool)
-- `%20`, `%3D`, `+` signs in URLs → **URL encoded**
+**Not sure what you're looking at?**
+- Ends with `=` or `==` → Base64
+- Only letters 0-9 and a-f → Hex
+- Only 0s and 1s → Binary
+- Looks like English but the letters are wrong → ROT13
+- Has `%20` or `%3D` in it → URL encoded
         """)
         cipher = st.text_area("Paste your encoded text:", height=100,
                                placeholder="dGhpcyBpcyBhIHRlc3Q=   or   Uryyb Jbeyq   or   48656c6c6f", key="ctf_cipher")
@@ -579,14 +539,13 @@ These are the most common things you'll see in beginner CTFs:
     # ── CAESAR / ROT BRUTE FORCE ────────────────────────────────────────
     elif tool == "🔄 Caesar / ROT Brute Force":
         st.markdown("""
-**Caesar cipher** shifts each letter by a fixed number. ROT13 is just Caesar with a shift of 13.
+Caesar cipher just shifts every letter by a fixed number. ROT13 is Caesar with shift 13 — the most common one in CTFs.
 
-If you have encoded text and aren't sure what shift was used, paste it here and we'll show you all 25 possibilities at once.
-The correct one will be the only one that reads as English (or whatever language the flag is in).
+If you don't know the shift, paste the text below and you'll see all 25 possible results. The right answer is the one that looks like English (or whatever language the flag is in).
         """)
         caesar_in = st.text_area("Paste encoded text:", height=80, key="caesar_in")
         if caesar_in:
-            st.markdown("**All 25 shifts — find the one that makes sense:**")
+            st.markdown("**All 25 shifts — one of these is your answer:**")
             for shift in range(1, 26):
                 result = ""
                 for ch in caesar_in:
@@ -597,19 +556,87 @@ The correct one will be the only one that reads as English (or whatever language
                         result += ch
                 st.text(f"ROT{shift:2d}: {result[:120]}")
 
+    # ── VIGENÈRE CIPHER ────────────────────────────────────────────────
+    elif tool == "🔑 Vigenère Cipher":
+        st.markdown("""
+Vigenère is like Caesar but uses a keyword instead of a single number. Each letter in your text is shifted by the corresponding letter in the key.
+
+**Example:** key = `KEY`, message = `HELLO`
+- H shifted by K (10) = R
+- E shifted by E (4) = I
+- L shifted by Y (24) = J
+- L shifted by K (10) = V
+- O shifted by E (4) = S
+→ `RIJVS`
+
+**In CTFs** the key is usually somewhere in the challenge description or filename. Try common words if you don't have it.
+        """)
+        vig_text = st.text_area("Ciphertext:", height=80, key="vig_text")
+        vig_key = st.text_input("Key (letters only):", placeholder="KEY  or  SECRET  or  FLAG", key="vig_key")
+        c1, c2 = st.columns(2)
+        if vig_text and vig_key:
+            key_clean = re.sub(r'[^a-zA-Z]', '', vig_key).upper()
+            if not key_clean:
+                danger("Key must contain at least one letter.")
+            else:
+                with c1:
+                    if st.button("Decrypt", use_container_width=True):
+                        result, ki = [], 0
+                        for ch in vig_text:
+                            if ch.isalpha():
+                                shift = ord(key_clean[ki % len(key_clean)]) - ord('A')
+                                base = ord('A') if ch.isupper() else ord('a')
+                                result.append(chr((ord(ch) - base - shift) % 26 + base))
+                                ki += 1
+                            else:
+                                result.append(ch)
+                        ok(f"**Decrypted:** {''.join(result)}")
+                with c2:
+                    if st.button("Encrypt", use_container_width=True):
+                        result, ki = [], 0
+                        for ch in vig_text:
+                            if ch.isalpha():
+                                shift = ord(key_clean[ki % len(key_clean)]) - ord('A')
+                                base = ord('A') if ch.isupper() else ord('a')
+                                result.append(chr((ord(ch) - base + shift) % 26 + base))
+                                ki += 1
+                            else:
+                                result.append(ch)
+                        ok(f"**Encrypted:** {''.join(result)}")
+
+    # ── ATBASH ─────────────────────────────────────────────────────────
+    elif tool == "🔁 Atbash Decoder":
+        st.markdown("""
+Atbash is one of the oldest ciphers — it just reverses the alphabet. A↔Z, B↔Y, C↔X, and so on. It's its own inverse, so encoding and decoding are the same operation.
+
+`HELLO` → `SVOOL` → `HELLO`
+
+Shows up fairly often in beginner CTFs, especially ones with a historical or ancient theme.
+        """)
+        atbash_in = st.text_area("Text to encode/decode:", height=80, placeholder="HELLO  or  SVOOL", key="atbash_in")
+        if atbash_in:
+            result = ""
+            for ch in atbash_in:
+                if ch.isalpha():
+                    base = ord('A') if ch.isupper() else ord('a')
+                    result += chr(base + 25 - (ord(ch) - base))
+                else:
+                    result += ch
+            ok(f"**Result:** {result}")
+
     # ── HASH IDENTIFIER ────────────────────────────────────────────────
     elif tool == "#️⃣ Hash Identifier & Cracker":
         st.markdown("""
-**A hash is a one-way fingerprint of data.** You can't reverse it, but you can look it up in a database of known hashes.
+A hash is a one-way fingerprint — you can't reverse it mathematically, but you can look it up in a database of billions of known hashes to find the original.
 
-**How to identify your hash:**
+**Identify yours by length:**
 - 32 characters → MD5
 - 40 characters → SHA-1
 - 64 characters → SHA-256
 - 128 characters → SHA-512
-- Starts with `$2y$` or `$2b$` → bcrypt
+- Starts with `$2y$` or `$2b$` → bcrypt (very slow to crack)
 
-After identifying it, paste it into CrackStation (free) to see if the original password is known.
+Paste it below — I'll tell you the type, give you the hashcat command, and link you to CrackStation to try it in-browser.
         """)
         hash_in = st.text_input("Paste the hash:", placeholder="5f4dcc3b5aa765d61d8327deb882cf99", key="h_in")
         if st.button("Identify", use_container_width=True) and hash_in:
@@ -638,51 +665,61 @@ After identifying it, paste it into CrackStation (free) to see if the original p
     # ── STEGANOGRAPHY ───────────────────────────────────────────────────
     elif tool == "🖼️ Steganography":
         st.markdown("""
-**Steganography = hiding data inside files.** In CTFs this almost always means a secret message hidden inside an image.
+Steganography = hiding secret data inside a file (usually an image). The file looks totally normal but there's something hidden in it.
 
-**Where to start:**
-1. Upload the image here to preview it
-2. Try [Aperisolve](https://aperisolve.com) first — it's the easiest online tool and runs everything automatically
-3. If that doesn't work, use the terminal commands below (on Kali Linux or any Linux system)
+**How to approach it:**
+1. Upload the image here — I'll show a preview and extract any readable strings from it right now
+2. If nothing obvious shows up, use the terminal commands below
+3. Aperisolve runs most stego tools automatically if you prefer a web UI
 
-**Signs that an image might have hidden data:**
-- The file size is suspiciously large for its dimensions
-- There's a password hint somewhere in the challenge
-- The image looks slightly off or has weird colors
+**Signs something is hidden:**
+- File size is way too big for its dimensions
+- The challenge gave you a password hint
+- The image has oddly solid areas or weird color banding
         """)
-        steg_f = st.file_uploader("Upload the image (optional preview)", type=["jpg","png","bmp","gif","tiff"], key="steg_f")
+        steg_f = st.file_uploader("Upload the image", type=["jpg","png","bmp","gif","tiff"], key="steg_f")
         if steg_f:
-            st.image(io.BytesIO(steg_f.getvalue()), width=300)
+            steg_bytes = steg_f.getvalue()
+            st.image(io.BytesIO(steg_bytes), width=300)
+            # Extract strings in-browser
+            found_str = re.findall(rb"[\x20-\x7E]{4,}", steg_bytes)
+            interesting = [s.decode("ascii","ignore") for s in found_str
+                           if any(k in s.decode("ascii","ignore").lower() for k in ["flag","ctf","key","secret","pass","hidden"])]
+            if interesting:
+                ok(f"Found {len(interesting)} interesting string(s) in the file:")
+                for s in interesting[:20]:
+                    st.code(s)
+            else:
+                st.info("No obvious flag-like strings found in the raw bytes. Try the tools below.")
 
-        st.link_button("🌐 Try Aperisolve first (easiest, free, online)", "https://aperisolve.com", use_container_width=True)
-        st.markdown("**Or run these in your terminal (Kali Linux):**")
-        st.code("""# Step 1 — check the real file type (don't trust the extension)
+        st.link_button("🌐 Aperisolve — runs all stego tools online", "https://aperisolve.com", use_container_width=True)
+        st.markdown("**Terminal commands (Kali Linux):**")
+        st.code("""# Check the real file type (don't trust the extension)
 file image.png
 
-# Step 2 — look for readable text with "flag" in it
+# Look for strings containing "flag"
 strings image.png | grep -iE 'flag|ctf|key|secret'
 
-# Step 3 — check for embedded files inside the image
+# Check for embedded files
 binwalk -e image.png
 
-# Step 4 — try steghide (works on JPGs, needs a password — try empty "")
+# Try steghide (JPG — try empty password first)
 steghide extract -sf image.jpg -p ""
 
-# Step 5 — zsteg for PNG hidden data
+# PNG hidden data
 zsteg -a image.png
 
-# Step 6 — check EXIF metadata
+# Check EXIF
 exiftool image.png""", language="bash")
 
     # ── WEB PAYLOADS ────────────────────────────────────────────────────
     elif tool == "💉 Web Payloads":
         st.markdown("""
-**These are common attack payloads used in web CTF challenges.**
-Only use these on systems you own or have permission to test.
+Ready-to-use payloads for web CTF challenges. Pick a category, copy, paste, and try.
 
-Pick a category to see ready-to-use payloads you can copy and try.
+Only use these on machines you own or have explicit permission to test.
         """)
-        warn("For authorized testing and CTF challenges only.")
+        warn("CTF and authorized testing only.")
         wcat = st.radio("Category:", ["SQL Injection", "XSS", "LFI/RFI", "SSTI", "SSRF", "XXE"], horizontal=True, key="wcat")
         payloads = {
             "SQL Injection": """-- Basic login bypass
@@ -750,10 +787,9 @@ http://2130706433/""",
     # ── FORENSICS ───────────────────────────────────────────────────────
     elif tool == "🔬 Forensics & PCAP":
         st.markdown("""
-**Forensics challenges give you files to analyze** — disk images, memory dumps, or network captures (.pcap files).
-The goal is usually to find a hidden file, recover deleted data, or read network traffic.
+Forensics challenges give you a file to dig through — network captures (`.pcap`), disk images, or memory dumps. You're looking for hidden files, deleted data, or suspicious traffic.
 
-**What you'll need:** Kali Linux (or any Linux) with `binwalk`, `foremost`, `tshark`, and `volatility` installed.
+Pick what you have and I'll give you the exact commands to run.
         """)
         ftool = st.radio("What are you working with?", ["PCAP (network capture)", "Disk image", "Memory dump"], horizontal=True, key="ftool")
         if ftool == "PCAP (network capture)":
@@ -804,9 +840,7 @@ strings memory.dump | grep -iE 'CTF\\{|flag\\{'""", language="bash")
     # ── NUMBER BASE CONVERTER ───────────────────────────────────────────
     elif tool == "🔢 Number Base Converter":
         st.markdown("""
-**Convert between number bases and ASCII text.** Useful when a CTF challenge gives you a strange-looking number.
-
-Just type anything — a decimal number, hex value, or plain text — and we'll convert it.
+Type a number or text and I'll convert it to/from decimal, hex, binary, and ASCII. Useful when a CTF gives you a weird-looking number and you need to figure out what it actually means.
         """)
         num_in = st.text_input("Enter a number or text:", placeholder="72  or  48656c6c6f  or  Hello", key="num_in")
         if num_in and num_in.strip():
@@ -838,10 +872,9 @@ Just type anything — a decimal number, hex value, or plain text — and we'll 
     # ── XOR DECODER ────────────────────────────────────────────────────
     elif tool == "🔐 XOR Decoder":
         st.markdown("""
-**XOR is a simple cipher** where each byte of the message is XOR'd against a key.
+XOR is super common in CTFs — each byte of the message gets XOR'd with a key. If you know the key, done. If not, I can brute-force all 256 single-byte possibilities and show you the ones that look like readable text.
 
-If you have a hex string from a CTF and suspect XOR, paste it here. If you know the key, enter it.
-If you don't know the key, try single-byte brute force — we'll try all 256 possible keys and show you the readable ones.
+Paste the ciphertext as hex. Leave the key blank to brute-force it.
         """)
         xor_hex = st.text_input("Hex-encoded ciphertext:", placeholder="1a2b3c4d5e...", key="xor_hex")
         xor_key = st.text_input("XOR key (text or hex, leave blank to brute force):", key="xor_key")
@@ -864,14 +897,11 @@ If you don't know the key, try single-byte brute force — we'll try all 256 pos
     # ── MORSE CODE ─────────────────────────────────────────────────────
     elif tool == "📡 Morse Code Decoder":
         st.markdown("""
-**Morse code** uses dots (`.`) and dashes (`-`) to represent letters. Each letter is separated by a space, each word by ` / ` or two spaces.
+Dots and dashes. Letters are separated by a single space, words by three spaces (or ` / `).
 
-**Examples:**
-- `.... .` → `HE`
-- `... --- ...` → `SOS`
-- `.... . .-.. .-.. ---` → `HELLO`
+`.... . .-.. .-.. ---   .-- --- .-. .-.. -..` = `HELLO WORLD`
 
-Paste your Morse code below and click Decode.
+Works both ways — decode Morse to text, or encode text to Morse.
         """)
         MORSE = {
             '.-':'A','-.-.':'C','-..':'D','.':'E','..-.':'F','--.':'G','....':'H','..':'I',
@@ -909,14 +939,9 @@ Paste your Morse code below and click Decode.
     # ── JWT DECODER ────────────────────────────────────────────────────
     elif tool == "🔑 JWT Decoder":
         st.markdown("""
-**JWT = JSON Web Token.** It's a three-part token used for authentication, split by dots:
-`header.payload.signature`
+JWT = JSON Web Token. It's three Base64 chunks separated by dots: `header.payload.signature`
 
-Each part is Base64-encoded. The payload contains claims like user ID, expiry time, and permissions.
-
-**In CTFs**, JWTs sometimes contain flags in the payload, or you can forge them by changing the algorithm to `none`.
-
-**How to use:** Paste the full JWT token below. We decode the header and payload — you can read everything except the signature.
+The payload is where the interesting stuff is — user IDs, expiry, roles, and sometimes flags. Paste the full token and I'll decode the header and payload for you. I'll flag it if something looks like a CTF flag.
         """)
         jwt_in = st.text_area("JWT token:", height=80, placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.xxx", key="jwt_in")
         if st.button("Decode JWT", use_container_width=True) and jwt_in:
@@ -943,17 +968,9 @@ Each part is Base64-encoded. The payload contains claims like user ID, expiry ti
     # ── URL ENCODER / DECODER ──────────────────────────────────────────
     elif tool == "🌐 URL Encoder / Decoder":
         st.markdown("""
-**URL encoding** replaces special characters with `%XX` codes so they can be safely used in URLs.
+URL encoding swaps special characters for `%XX` codes. You'll see this in web CTF challenges where URLs have stuff like `%3D`, `%2F`, or `%27` in them.
 
-**Common in CTFs when:**
-- A URL has `%3D`, `%2F`, `%20` etc. in it
-- You need to inject a payload into a URL parameter
-- You're reading a web challenge and something looks weird in the URL
-
-**Examples:**
-- `hello world` → `hello%20world`
-- `flag{test}` → `flag%7Btest%7D`
-- `' OR 1=1--` → `%27%20OR%201%3D1--`
+Paste whatever you have and I'll show you both the encoded and decoded version side by side.
         """)
         url_in = st.text_area("Text to encode or decode:", height=80, placeholder="hello world  or  hello%20world", key="url_in")
         if url_in:
@@ -973,11 +990,11 @@ Each part is Base64-encoded. The payload contains claims like user ID, expiry ti
     # ── BASE32 ────────────────────────────────────────────────────────
     elif tool == "📦 Base32 Decoder":
         st.markdown("""
-**Base32** is similar to Base64 but only uses uppercase letters A-Z and digits 2-7.
-It's used in some CTFs, OTP/2FA seeds, and Tor `.onion` addresses.
+Base32 is like Base64 but only uses A-Z and 2-7. All uppercase, usually ends with `=` signs.
 
-**How to identify it:** All uppercase, only A-Z and 2-7, usually ends with `=` or `====`.
-> Example: `JBSWY3DPEBLW64TMMQ======` → decodes to `Hello, World!`
+`JBSWY3DPEBLW64TMMQ======` → `Hello, World!`
+
+Shows up in CTFs, OTP/2FA seeds, and Tor `.onion` addresses.
         """)
         b32_in = st.text_area("Base32 text:", height=80, placeholder="JBSWY3DPEBLW64TMMQ======", key="b32_in")
         c1, c2 = st.columns(2)
@@ -1000,15 +1017,16 @@ It's used in some CTFs, OTP/2FA seeds, and Tor `.onion` addresses.
 with tab6:
     sec("Deep File Scan")
     st.markdown("""
-**Upload any file** and we'll pull it apart:
-- Calculate its SHA256 hash (good for verifying integrity)
-- Measure its entropy — high entropy (7-8) means it's likely encrypted or compressed
-- Extract all readable strings from the raw bytes
-- Show a visual entropy heatmap
+Upload any file — image, PDF, zip, binary, whatever — and I'll tear it apart:
 
-**What's entropy?** It measures randomness. Normal text files have low entropy (~3-5). Encrypted files or compressed archives have high entropy (~7.5-8).
+- **SHA256 hash** — useful for verifying a file hasn't been tampered with
+- **Entropy score** — high entropy (near 8.0) means the file is encrypted or packed. Low entropy (~3-4) means plain text
+- **Readable strings** — pulls out every readable string from the raw bytes
+- **Entropy heatmap** — visual breakdown showing which parts of the file are compressed/encrypted (red) vs normal (blue)
+
+This is how malware analysts start looking at suspicious files.
     """)
-    tip("Try uploading a .jpg, .pdf, .zip, or any binary file. Encrypted sections will show up bright red on the heatmap.")
+    tip("Encrypted sections show up bright red on the heatmap. If a file claims to be a plain document but the heatmap is mostly red, something's off.")
 
     deep_f = st.file_uploader("Choose a file", key="deep_f")
     if deep_f:
@@ -1060,15 +1078,16 @@ with tab6:
 with tab7:
     sec("Network Recon")
     st.markdown("""
-**Enter an IP address or domain name** to get:
-- DNS records (what servers are behind this domain?)
-- Geolocation (what country/city is this IP in?)
-- Links to threat intelligence databases (VirusTotal, Shodan)
+Enter an IP or domain and I'll run everything I can against it right here:
 
-**What's DNS?** Domain Name System — it translates domain names (like google.com) into IP addresses (142.250.80.46).
-Looking up DNS records tells you what mail servers a company uses, what IP addresses a domain points to, and more.
+- **DNS records** — see what IPs, mail servers, and nameservers are behind a domain
+- **IP geolocation** — country, city, ISP, coordinates
+- **Common subdomain probe** — checks ~20 common subdomains (admin, mail, vpn, dev, etc.) to see what's exposed
+- **Threat intel links** — VirusTotal, Shodan, AbuseIPDB one-click
+
+**What's DNS?** It maps domain names to IPs. `google.com` → `142.250.80.46`. The records tell you a lot about how a company's infrastructure is set up.
     """)
-    tip("Try entering a domain like `google.com` or an IP like `8.8.8.8` to see what comes back.")
+    tip("Try `8.8.8.8` (Google DNS) or `example.com` to see what comes back. For pentesting, start with the domain before the IP.")
 
     net_t = st.text_input("IP address or domain", placeholder="8.8.8.8  or  example.com", key="net_t")
     if st.button("Run Recon", use_container_width=True, key="net_go") and net_t:
@@ -1078,7 +1097,7 @@ Looking up DNS records tells you what mail servers a company uses, what IP addre
 
         if HAS_DNS and not is_ip:
             sec("DNS Records")
-            tip("A = IPv4 address, MX = mail server, TXT = verification/SPF records, NS = name servers")
+            tip("A = IPv4, MX = mail server, TXT = SPF/DKIM/verification records, NS = nameservers")
             found_dns = False
             for rtype in ['A', 'AAAA', 'MX', 'NS', 'TXT']:
                 try:
@@ -1088,7 +1107,28 @@ Looking up DNS records tells you what mail servers a company uses, what IP addre
                         found_dns = True
                 except: pass
             if not found_dns:
-                st.info("No DNS records found. Check if the domain is correct.")
+                st.info("No DNS records found. Double-check the domain.")
+
+            sec("🔍 Common Subdomain Probe")
+            tip("Checking ~20 common subdomains. Green = resolved to an IP (might be live). This is not a port scan.")
+            COMMON_SUBS = ["www","mail","remote","blog","webmail","server","ns1","ns2","smtp","secure",
+                           "vpn","api","dev","admin","portal","test","mx","ftp","ssh","app"]
+            sub_results = []
+            spb = st.progress(0.0)
+            for i, sub in enumerate(COMMON_SUBS):
+                try:
+                    ans = dns.resolver.resolve(f"{sub}.{tgt}", 'A', lifetime=2)
+                    ips = [str(r) for r in ans]
+                    sub_results.append((f"{sub}.{tgt}", ips))
+                except: pass
+                spb.progress((i+1)/len(COMMON_SUBS))
+            spb.empty()
+            if sub_results:
+                ok(f"Found {len(sub_results)} live subdomains:")
+                for name, ips in sub_results:
+                    rcard(f"<b>{name}</b> → {', '.join(ips)}")
+            else:
+                st.info("No common subdomains resolved. Try a full scan with Amass or Subfinder.")
 
         if is_ip:
             sec("IP Geolocation")
@@ -1106,7 +1146,6 @@ Looking up DNS records tells you what mail servers a company uses, what IP addre
                 st.info("Couldn't fetch geolocation right now.")
 
         sec("Threat Intelligence")
-        st.markdown("These sites have huge databases of known threats, malware, and scanned services:")
         c1, c2, c3 = st.columns(3)
         kind = 'ip-address' if is_ip else 'domain'
         c1.link_button("VirusTotal", f"https://www.virustotal.com/gui/{kind}/{tgt}", use_container_width=True)
@@ -1118,10 +1157,11 @@ Looking up DNS records tells you what mail servers a company uses, what IP addre
 with tab8:
     sec("Password Tools")
     st.markdown("""
-Three things you can do here:
-- **Check a password** — see how strong it actually is and what it would take to crack
-- **Generate passwords** — get secure random passwords you can actually use
-- **Hash text** — turn any string into MD5/SHA1/SHA256 (useful for CTFs and understanding how password storage works)
+Three things here — pick what you need:
+
+- **Check a password** — honest scoring, no fluff, tells you exactly what's weak about it
+- **Generate passwords** — actually random, actually secure, copy and use them
+- **Hash text** — generate MD5/SHA1/SHA256/SHA512 hashes right here (great for CTFs)
     """)
 
     pw_mode = st.radio("What do you need?", ["Check a password", "Generate passwords", "Hash something"], horizontal=True)
