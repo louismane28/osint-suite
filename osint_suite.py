@@ -27,7 +27,9 @@ st.set_page_config(page_title="OSINT Suite", page_icon="🔬", layout="wide", in
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
+
+/* ── Reset only what we need, don't break Streamlit widgets ── */
+.stApp *{box-sizing:border-box}
 
 /* ── Background ── */
 .stApp{
@@ -39,7 +41,7 @@ st.markdown("""
   min-height:100vh;
 }
 
-/* ── Animated scan-line grid ── */
+/* ── Grid overlay ── */
 .stApp::before{
   content:'';
   position:fixed;top:0;left:0;right:0;bottom:0;
@@ -54,52 +56,18 @@ st.markdown("""
 body,.stApp,p,span,div,label{font-family:'Space Grotesk',sans-serif!important;color:#c0d8ee}
 h1,h2,h3,h4{font-family:'Share Tech Mono',monospace!important}
 
-/* ── Hero banner ── */
-.hero{
-  text-align:center;
-  padding:2.2rem 1rem 1rem;
-  position:relative;
-}
-.hero-logo{
-  font-size:4rem;
-  filter:drop-shadow(0 0 24px rgba(0,195,255,.6)) drop-shadow(0 0 48px rgba(0,195,255,.3));
-  animation:float 4s ease-in-out infinite;
-  display:block;
-  margin-bottom:.6rem;
-}
-.hero-title{
-  font-family:'Share Tech Mono',monospace!important;
-  font-size:2.4rem;font-weight:800;
-  background:linear-gradient(135deg,#ffffff 0%,#00ddff 45%,#9b72ff 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  letter-spacing:2px;
-  text-transform:uppercase;
-}
-.hero-sub{
-  color:#3d6070;font-size:.8rem;margin-top:.5rem;letter-spacing:1px;
-}
-.hero-badges{
-  display:flex;justify-content:center;gap:.5rem;flex-wrap:wrap;margin-top:.9rem;
-}
-.hbadge{
-  background:rgba(0,195,255,.07);
-  border:1px solid rgba(0,195,255,.2);
-  border-radius:30px;padding:3px 12px;
-  font-size:.7rem;color:#5fc8e8;
-  letter-spacing:.5px;
-}
+/* ── Hero ── */
+.hero{text-align:center;padding:2.2rem 1rem 1rem;position:relative}
+.hero-logo{font-size:4rem;filter:drop-shadow(0 0 24px rgba(0,195,255,.6)) drop-shadow(0 0 48px rgba(0,195,255,.3));animation:float 4s ease-in-out infinite;display:block;margin-bottom:.6rem}
+.hero-title{font-family:'Share Tech Mono',monospace!important;font-size:2.4rem;font-weight:800;background:linear-gradient(135deg,#ffffff 0%,#00ddff 45%,#9b72ff 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px;text-transform:uppercase}
+.hero-sub{color:#3d6070;font-size:.8rem;margin-top:.5rem;letter-spacing:1px}
+.hero-badges{display:flex;justify-content:center;gap:.5rem;flex-wrap:wrap;margin-top:.9rem}
+.hbadge{background:rgba(0,195,255,.07);border:1px solid rgba(0,195,255,.2);border-radius:30px;padding:3px 12px;font-size:.7rem;color:#5fc8e8;letter-spacing:.5px}
 
-/* ── Glass cards ── */
-.glass{
-  background:linear-gradient(140deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
-  backdrop-filter:blur(24px) saturate(180%);
-  border-radius:20px;
-  border:1px solid rgba(255,255,255,.09);
-  box-shadow:0 8px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
-  padding:1.3rem 1.5rem;margin:.6rem 0;
-}
+/* ── Glass ── */
+.glass{background:linear-gradient(140deg,rgba(255,255,255,.07),rgba(255,255,255,.02));backdrop-filter:blur(24px) saturate(180%);border-radius:20px;border:1px solid rgba(255,255,255,.09);box-shadow:0 8px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);padding:1.3rem 1.5rem;margin:.6rem 0}
 
-/* ── Callout boxes ── */
+/* ── Callouts ── */
 .tip{background:rgba(0,255,160,.05);border-left:3px solid #00ffaa;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0 .9rem;font-size:.875rem;color:#8ae8c4}
 .warn{background:rgba(255,170,0,.06);border-left:3px solid #ffaa00;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0;font-size:.875rem;color:#ffd070}
 .danger{background:rgba(255,50,50,.07);border-left:3px solid #ff4444;border-radius:0 14px 14px 0;padding:.65rem 1.1rem;margin:.4rem 0;color:#ff9090}
@@ -110,7 +78,7 @@ h1,h2,h3,h4{font-family:'Share Tech Mono',monospace!important}
 .rcard a{color:#00e0ff;text-decoration:none}
 .badge-found{display:inline-block;background:rgba(0,255,130,.15);border:1px solid rgba(0,255,130,.5);border-radius:20px;padding:1px 9px;font-size:.72rem;color:#00ff88;margin-left:6px}
 
-/* ── Stat pills ── */
+/* ── Pills ── */
 .stat-row{display:flex;gap:10px;flex-wrap:wrap;margin:.7rem 0}
 .stat-pill{background:rgba(0,195,255,.07);border:1px solid rgba(0,195,255,.18);border-radius:40px;padding:4px 13px;font-size:.8rem;color:#6dd8f8}
 
@@ -119,35 +87,15 @@ h1,h2,h3,h4{font-family:'Share Tech Mono',monospace!important}
 .sec-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(0,195,255,.25),transparent);margin-left:8px}
 
 /* ── Buttons ── */
-.stButton>button{
-  background:linear-gradient(135deg,#00c0ff,#004ecc)!important;
-  border:none!important;border-radius:50px!important;
-  padding:.52rem 1.4rem!important;font-weight:600!important;
-  color:#fff!important;letter-spacing:.3px!important;
-  box-shadow:0 4px 20px rgba(0,110,255,.4)!important;
-  transition:all .2s!important;
-}
+.stButton>button{background:linear-gradient(135deg,#00c0ff,#004ecc)!important;border:none!important;border-radius:50px!important;padding:.52rem 1.4rem!important;font-weight:600!important;color:#fff!important;letter-spacing:.3px!important;box-shadow:0 4px 20px rgba(0,110,255,.4)!important;transition:all .2s!important}
 .stButton>button:hover{transform:translateY(-2px)!important;box-shadow:0 8px 30px rgba(0,110,255,.65)!important}
 
-/* ── Inputs ── */
-.stTextInput input,.stTextArea textarea{
-  background:rgba(8,18,32,.85)!important;
-  border:1px solid rgba(0,195,255,.2)!important;
-  border-radius:50px!important;
-  color:#e2f2ff!important;
-  font-family:'Share Tech Mono',monospace!important;
-  font-size:.93rem!important;padding:.6rem 1.1rem!important;
-}
-.stTextArea textarea{border-radius:16px!important}
+/* ── Text inputs only (not file uploader) ── */
+.stTextInput input{background:rgba(8,18,32,.85)!important;border:1px solid rgba(0,195,255,.2)!important;border-radius:50px!important;color:#e2f2ff!important;font-family:'Share Tech Mono',monospace!important;font-size:.93rem!important;padding:.6rem 1.1rem!important}
+.stTextArea textarea{background:rgba(8,18,32,.85)!important;border:1px solid rgba(0,195,255,.2)!important;border-radius:16px!important;color:#e2f2ff!important;font-family:'Share Tech Mono',monospace!important;font-size:.93rem!important}
 
 /* ── Tabs ── */
-.stTabs [data-baseweb="tab-list"]{
-  display:flex!important;justify-content:center!important;flex-wrap:wrap!important;
-  background:rgba(4,12,24,.88)!important;backdrop-filter:blur(18px)!important;
-  border-radius:60px!important;padding:6px 12px!important;gap:4px!important;
-  border:1px solid rgba(0,195,255,.14)!important;
-  margin:0 auto 1rem!important;width:fit-content!important;
-}
+.stTabs [data-baseweb="tab-list"]{display:flex!important;justify-content:center!important;flex-wrap:wrap!important;background:rgba(4,12,24,.88)!important;backdrop-filter:blur(18px)!important;border-radius:60px!important;padding:6px 12px!important;gap:4px!important;border:1px solid rgba(0,195,255,.14)!important;margin:0 auto 1rem!important;width:fit-content!important}
 .stTabs [data-baseweb="tab"]{font-family:'Space Grotesk',sans-serif!important;font-weight:500!important;font-size:.75rem!important;color:#607a92!important;padding:.4rem 1rem!important;border-radius:40px!important;white-space:nowrap!important}
 .stTabs [aria-selected="true"]{background:linear-gradient(135deg,#00c0ff,#0050cc)!important;color:#fff!important;box-shadow:0 0 20px rgba(0,192,255,.45)!important}
 
@@ -157,18 +105,12 @@ pre,code{font-family:'Share Tech Mono',monospace!important;font-size:.83rem!impo
 
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-@keyframes pulse-glow{0%,100%{box-shadow:0 0 20px rgba(0,195,255,.2)}50%{box-shadow:0 0 40px rgba(0,195,255,.5)}}
 
 .ldot{display:inline-block;width:7px;height:7px;background:#00ff88;border-radius:50%;animation:blink 1.8s infinite;margin-right:5px;vertical-align:middle}
 
-/* ── Feature grid on hero ── */
-.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.6rem;margin:1.2rem 0}
-.feat-card{
-  background:linear-gradient(140deg,rgba(0,195,255,.06),rgba(0,195,255,.02));
-  border:1px solid rgba(0,195,255,.12);border-radius:16px;
-  padding:.8rem 1rem;text-align:center;
-  transition:all .2s;cursor:default;
-}
+/* ── Feature grid ── */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem;margin:1.2rem 0}
+.feat-card{background:linear-gradient(140deg,rgba(0,195,255,.06),rgba(0,195,255,.02));border:1px solid rgba(0,195,255,.12);border-radius:16px;padding:.8rem 1rem;text-align:center;transition:all .2s;cursor:default}
 .feat-card:hover{background:rgba(0,195,255,.1);border-color:rgba(0,195,255,.3);transform:translateY(-3px)}
 .feat-icon{font-size:1.5rem;display:block;margin-bottom:.3rem}
 .feat-label{font-size:.72rem;color:#5fc8e8;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
@@ -180,7 +122,7 @@ st.markdown("""
 <div class="hero">
   <span class="hero-logo">🔬</span>
   <div class="hero-title">OSINT Suite</div>
-  <div class="hero-sub"><span class="ldot"></span>open source intelligence · built by a dev who needed it · always free</div>
+  <div class="hero-sub"><span class="ldot"></span>open source intelligence · always free · no login needed</div>
   <div class="hero-badges">
     <span class="hbadge">🔒 nothing stored</span>
     <span class="hbadge">⚡ live lookups</span>
@@ -200,6 +142,8 @@ st.markdown("""
   <div class="feat-card"><span class="feat-icon">🔐</span><span class="feat-label">Password Tools</span></div>
 </div>
 """, unsafe_allow_html=True)
+
+st.markdown("<p style='text-align:center;color:#3d5060;font-size:.75rem;margin-bottom:.5rem'>↓ Click a tab below to get started</p>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("## 🔬 OSINT Suite")
@@ -1104,24 +1048,27 @@ The payload is where the interesting stuff is — user IDs, expiry, roles, and s
     # ── URL ENCODER / DECODER ──────────────────────────────────────────
     elif tool == "🌐 URL Encoder / Decoder":
         st.markdown("""
-URL encoding swaps special characters for `%XX` codes. You'll see this in web CTF challenges where URLs have stuff like `%3D`, `%2F`, or `%27` in them.
+URL encoding replaces special characters with `%XX` codes. Plain letters, numbers, dots, and hyphens are **not** changed — so `www.google.com` encodes to `www.google.com` (that's correct, nothing to encode).
 
-Paste whatever you have and I'll show you both the encoded and decoded version side by side.
+Characters that **do** get encoded: spaces → `%20`, `{` → `%7B`, `}` → `%7D`, `=` → `%3D`, `/` → `%2F`, `'` → `%27`
+
+Try something like: `flag{hello world}` or `' OR 1=1--`
         """)
-        url_in = st.text_area("Text to encode or decode:", height=80, placeholder="hello world  or  hello%20world", key="url_in")
+        url_in = st.text_area("Text to encode or decode:", height=80, placeholder="flag{hello world}  or  hello%20world", key="url_in")
         if url_in:
             c1, c2 = st.columns(2)
             with c1:
                 encoded = urllib.parse.quote(url_in.strip(), safe='')
                 st.markdown("**URL Encoded:**")
                 st.code(encoded)
+                if encoded == url_in.strip():
+                    st.caption("ℹ️ No special characters to encode — output is the same as input.")
             with c2:
                 decoded = urllib.parse.unquote(url_in.strip())
                 st.markdown("**URL Decoded:**")
                 st.code(decoded)
-            # Double-encoded detection
             if '%25' in url_in:
-                warn("Looks double-encoded (has `%25`). Click URL Decoded twice to fully decode.")
+                warn("Looks double-encoded (`%25` found). Decode once more to get the real value.")
 
     # ── BASE32 ────────────────────────────────────────────────────────
     elif tool == "📦 Base32 Decoder":
